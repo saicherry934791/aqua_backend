@@ -1,0 +1,187 @@
+sequenceDiagram
+    participant Client
+    participant AuthController
+    participant AuthService
+    participant Firebase
+    participant UserService
+    participant DB
+
+    Client->>AuthController: Request OTP (phone)
+    AuthController->>AuthService: initiateOtp(phone)
+    AuthService->>Firebase: sendOtpToPhone(phone)
+    Firebase-->>AuthService: otpSent confirmation
+    AuthService-->>AuthController: otpInitiated response
+    AuthController-->>Client: OTP sent response
+
+    Client->>AuthController: Verify OTP (phone, code)
+    AuthController->>AuthService: verifyOtp(phone, code)
+    AuthService->>Firebase: verifyPhoneOtp(phone, code)
+    Firebase-->>AuthService: verification result with UID
+    
+    alt First-time user
+        AuthService->>UserService: checkUserExists(phone)
+        UserService->>DB: findUserByPhone(phone)
+        DB-->>UserService: user not found
+        AuthService-->>AuthController: registrationRequired response
+        AuthController-->>Client: Redirect to registration
+        
+        Client->>AuthController: Register (userData)
+        AuthController->>UserService: createUser(userData)
+        UserService->>DB: insertUser(userData)
+        DB-->>UserService: user created
+        UserService-->>AuthController: user data
+        AuthController->>AuthService: generateTokens(userData)
+        AuthService-->>AuthController: access and refresh tokens
+        AuthController-->>Client: Registration successful with tokens
+    else Existing user
+        UserService->>DB: findUserByPhone(phone)
+        DB-->>UserService: user data
+        UserService-->>AuthService: user data
+        AuthService->>AuthService: generateTokens(userData)
+        AuthService-->>AuthController: access and refresh tokens
+        AuthController-->>Client: Login successful with tokens
+    end
+
+    participant ProductController
+    participant ProductService
+    participant OrderController
+    participant OrderService
+    participant PaymentService
+    participant RazorpayAPI
+    participant NotificationService
+
+    Client->>ProductController: Get Products (filters)
+    ProductController->>ProductService: getProducts(filters)
+    ProductService->>DB: queryProducts(filters)
+    DB-->>ProductService: product list
+    ProductService-->>ProductController: formatted product list
+    ProductController-->>Client: Products response
+
+    Client->>ProductController: Get Product Details (id)
+    ProductController->>ProductService: getProductById(id)
+    ProductService->>DB: queryProductWithFeatures(id)
+    DB-->>ProductService: product with features
+    ProductService-->>ProductController: formatted product details
+    ProductController-->>Client: Product details response
+
+    Client->>OrderController: Create Order (productId, type, userId)
+    OrderController->>OrderService: createOrder(orderData)
+    OrderService->>DB: insertOrder(orderData)
+    DB-->>OrderService: order created
+    OrderService->>PaymentService: initiatePayment(orderId, amount)
+    PaymentService->>RazorpayAPI: createPaymentOrder(amount)
+    RazorpayAPI-->>PaymentService: razorpay order details
+    PaymentService->>DB: updateOrderWithPaymentInfo(orderId, paymentInfo)
+    DB-->>PaymentService: updated order
+    PaymentService-->>OrderService: payment initiation details
+    OrderService-->>OrderController: order with payment details
+    OrderController-->>Client: Order created with payment info
+
+    Client->>OrderController: Confirm Payment (orderId, paymentId)
+    OrderController->>PaymentService: verifyPayment(orderId, paymentId)
+    PaymentService->>RazorpayAPI: verifyPaymentSignature(paymentData)
+    RazorpayAPI-->>PaymentService: verification result
+    PaymentService->>DB: updatePaymentStatus(orderId, status)
+    DB-->>PaymentService: updated payment
+
+    alt Rental order
+        PaymentService->>OrderService: handleRentalOrderPayment(orderId)
+        OrderService->>DB: createRental(orderId)
+        DB-->>OrderService: rental created
+    else Purchase order
+        PaymentService->>OrderService: handlePurchaseOrderPayment(orderId)
+        OrderService->>DB: updateOrderStatus(orderId, PAYMENT_COMPLETED)
+        DB-->>OrderService: updated order
+    end
+
+    OrderService->>NotificationService: sendOrderConfirmation(orderId)
+    NotificationService->>DB: createNotification(notification)
+    DB-->>NotificationService: notification created
+    OrderService-->>OrderController: payment verification result
+    OrderController-->>Client: Payment confirmation
+
+    OrderService->>OrderService: assignServiceAgent(orderId)
+    OrderService->>DB: createServiceRequest(orderId, INSTALLATION)
+    DB-->>OrderService: service request created
+    OrderService->>NotificationService: notifyServiceAgent(serviceRequestId)
+    NotificationService->>DB: createNotification(notification)
+    DB-->>NotificationService: notification created
+
+    participant ServiceRequestController
+    participant ServiceRequestService
+
+    Client->>ServiceRequestController: Create Service Request (data)
+    ServiceRequestController->>ServiceRequestService: createServiceRequest(data)
+    ServiceRequestService->>DB: insertServiceRequest(data)
+    DB-->>ServiceRequestService: service request created
+
+    ServiceRequestService->>UserService: findAvailableServiceAgents(franchiseAreaId)
+    UserService->>DB: queryServiceAgents(franchiseAreaId)
+    DB-->>UserService: available service agents
+    UserService-->>ServiceRequestService: service agent list
+
+    ServiceRequestService->>ServiceRequestService: assignServiceAgent(serviceRequestId, agentId)
+    ServiceRequestService->>DB: updateServiceRequestAssignee(serviceRequestId, agentId)
+    DB-->>ServiceRequestService: updated service request
+
+    ServiceRequestService->>NotificationService: notifyServiceAgent(serviceRequestId, agentId)
+    NotificationService->>DB: createNotification(agentNotification)
+    DB-->>NotificationService: notification created
+    
+    ServiceRequestService->>NotificationService: notifyCustomer(serviceRequestId, customerId)
+    NotificationService->>DB: createNotification(customerNotification)
+    DB-->>NotificationService: notification created
+
+    ServiceRequestService-->>ServiceRequestController: service request details
+    ServiceRequestController-->>Client: Service request created response
+
+    participant RentalController
+    participant RentalService
+
+    Client->>RentalController: Pause Rental (rentalId)
+    RentalController->>RentalService: pauseRental(rentalId)
+    RentalService->>DB: updateRentalStatus(rentalId, PAUSED)
+    RentalService->>DB: updateRentalPausedAt(rentalId, currentDate)
+    DB-->>RentalService: updated rental
+    RentalService-->>RentalController: pause result
+    RentalController-->>Client: Rental paused response
+
+    Client->>RentalController: Resume Rental (rentalId)
+    RentalController->>RentalService: resumeRental(rentalId)
+    RentalService->>DB: calculateNewPeriodDates(rentalId)
+    DB-->>RentalService: period calculations
+    RentalService->>DB: updateRentalStatus(rentalId, ACTIVE)
+    RentalService->>DB: updateRentalPeriodDates(rentalId, newDates)
+    DB-->>RentalService: updated rental
+    RentalService-->>RentalController: resume result
+    RentalController-->>Client: Rental resumed response
+
+    participant FranchiseController
+    participant FranchiseService
+    participant AdminClient
+
+    AdminClient->>FranchiseController: Create Franchise Area (areaData)
+    FranchiseController->>FranchiseService: createFranchiseArea(areaData)
+    FranchiseService->>DB: insertFranchiseArea(areaData)
+    DB-->>FranchiseService: franchise area created
+    FranchiseService-->>FranchiseController: franchise area details
+    FranchiseController-->>AdminClient: Franchise area created response
+
+    AdminClient->>FranchiseController: Assign Franchise Owner (areaId, userId)
+    FranchiseController->>FranchiseService: assignFranchiseOwner(areaId, userId)
+    FranchiseService->>UserService: checkUserRole(userId)
+    UserService->>DB: getUserById(userId)
+    DB-->>UserService: user data
+    UserService-->>FranchiseService: user data
+
+    alt User is not a franchise owner
+        FranchiseService->>UserService: updateUserRole(userId, FRANCHISE_OWNER)
+        UserService->>DB: updateUser(userId, role)
+        DB-->>UserService: updated user
+        UserService-->>FranchiseService: updated user data
+    end
+
+    FranchiseService->>DB: updateFranchiseOwner(areaId, userId)
+    DB-->>FranchiseService: updated franchise area
+    FranchiseService-->>FranchiseController: assignment result
+    FranchiseController-->>AdminClient: Owner assigned response

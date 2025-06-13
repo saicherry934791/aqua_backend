@@ -1,0 +1,241 @@
+classDiagram
+    class User {
+        +id: string
+        +phone: string
+        +name: string
+        +email: string
+        +address: string
+        +alternativePhone: string
+        +role: UserRole
+        +location: GeoLocation
+        +franchiseAreaId: string
+        +createdAt: Date
+        +updatedAt: Date
+        +isActive: boolean
+    }
+
+    class UserRole {
+        <<enum>>
+        CUSTOMER
+        ADMIN
+        FRANCHISE_OWNER
+        SERVICE_AGENT
+    }
+
+    class GeoLocation {
+        +latitude: number
+        +longitude: number
+    }
+
+    class FranchiseArea {
+        +id: string
+        +name: string
+        +description: string
+        +geoPolygon: GeoJSON
+        +ownerId: string
+        +isCompanyManaged: boolean
+        +createdAt: Date
+        +updatedAt: Date
+        +isActive: boolean
+    }
+
+    class Product {
+        +id: string
+        +name: string
+        +description: string
+        +images: string[]
+        +rentPrice: number
+        +buyPrice: number
+        +deposit: number
+        +isRentable: boolean
+        +isPurchasable: boolean
+        +createdAt: Date
+        +updatedAt: Date
+        +isActive: boolean
+    }
+
+    class ProductFeature {
+        +id: string
+        +productId: string
+        +name: string
+        +value: string
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class Order {
+        +id: string
+        +customerId: string
+        +productId: string
+        +type: OrderType
+        +status: OrderStatus
+        +totalAmount: number
+        +paymentStatus: PaymentStatus
+        +serviceAgentId: string
+        +installationDate: Date
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class OrderType {
+        <<enum>>
+        PURCHASE
+        RENTAL
+    }
+
+    class OrderStatus {
+        <<enum>>
+        CREATED
+        PAYMENT_PENDING
+        PAYMENT_COMPLETED
+        ASSIGNED
+        INSTALLATION_PENDING
+        INSTALLED
+        CANCELLED
+        COMPLETED
+    }
+
+    class PaymentStatus {
+        <<enum>>
+        PENDING
+        COMPLETED
+        FAILED
+        REFUNDED
+    }
+
+    class Payment {
+        +id: string
+        +orderId: string
+        +amount: number
+        +type: PaymentType
+        +status: PaymentStatus
+        +razorpayPaymentId: string
+        +razorpayOrderId: string
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class PaymentType {
+        <<enum>>
+        DEPOSIT
+        PURCHASE
+        RENTAL
+        REFUND
+    }
+
+    class Rental {
+        +id: string
+        +orderId: string
+        +customerId: string
+        +productId: string
+        +status: RentalStatus
+        +startDate: Date
+        +pausedAt: Date
+        +endDate: Date
+        +currentPeriodStartDate: Date
+        +currentPeriodEndDate: Date
+        +monthlyAmount: number
+        +depositAmount: number
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class RentalStatus {
+        <<enum>>
+        ACTIVE
+        PAUSED
+        TERMINATED
+        EXPIRED
+    }
+
+    class ServiceRequest {
+        +id: string
+        +customerId: string
+        +productId: string
+        +orderId: string
+        +type: ServiceRequestType
+        +description: string
+        +status: ServiceRequestStatus
+        +assignedToId: string
+        +franchiseAreaId: string
+        +scheduledDate: Date
+        +completedDate: Date
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class ServiceRequestType {
+        <<enum>>
+        INSTALLATION
+        REPAIR
+        MAINTENANCE
+        UNINSTALLATION
+        OTHER
+    }
+
+    class ServiceRequestStatus {
+        <<enum>>
+        CREATED
+        ASSIGNED
+        IN_PROGRESS
+        COMPLETED
+        CANCELLED
+    }
+
+    class Notification {
+        +id: string
+        +userId: string
+        +title: string
+        +message: string
+        +type: NotificationType
+        +referenceId: string
+        +referenceType: string
+        +channels: NotificationChannel[]
+        +status: NotificationStatus
+        +createdAt: Date
+        +updatedAt: Date
+        +scheduledAt: Date
+    }
+
+    class NotificationType {
+        <<enum>>
+        ORDER_CONFIRMATION
+        PAYMENT_SUCCESS
+        PAYMENT_FAILURE
+        SERVICE_REQUEST
+        ASSIGNMENT_NOTIFICATION
+        STATUS_UPDATE
+        RENTAL_REMINDER
+    }
+
+    class NotificationChannel {
+        <<enum>>
+        EMAIL
+        SMS
+        PUSH
+        WHATSAPP
+    }
+
+    class NotificationStatus {
+        <<enum>>
+        PENDING
+        SENT
+        FAILED
+        READ
+    }
+
+    User "1" -- "*" Order: places
+    User "1" -- "*" Rental: has
+    User "1" -- "*" ServiceRequest: creates
+    User "1" -- "*" ServiceRequest: assigned to
+    User "1" -- "*" Notification: receives
+    User "*" -- "1" FranchiseArea: belongs to
+    User "1" -- "*" FranchiseArea: owns
+
+    Product "1" -- "*" ProductFeature: has
+    Product "1" -- "*" Order: ordered in
+    Product "1" -- "*" Rental: rented in
+    Product "1" -- "*" ServiceRequest: serviced in
+
+    Order "1" -- "*" Payment: has
+    Order "1" -- "1" Rental: creates
