@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { notifications, users } from '../models/schema';
 import { NotificationType, NotificationChannel, NotificationStatus } from '../types';
 import { generateId } from '../utils/helpers';
@@ -172,4 +172,97 @@ export async function processPendingNotifications() {
   
   // Call the notification plugin's processPendingNotifications method
   await fastify.notification.processPendingNotifications();
+}
+
+// Send notification (push, email, WhatsApp, etc.)
+export async function send(
+  userId: string | null,
+  title: string,
+  message: string,
+  type: NotificationType,
+  channels: NotificationChannel[],
+  referenceId?: string,
+  referenceType?: string,
+  scheduledAt?: string
+) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  const id = generateId('ntf');
+  const now = new Date().toISOString();
+  const notification = {
+    id,
+    userId: userId || '',
+    title,
+    message,
+    type,
+    referenceId: referenceId || null,
+    referenceType: referenceType || null,
+    channels: JSON.stringify(channels),
+    status: NotificationStatus.PENDING,
+    createdAt: now,
+    updatedAt: now,
+    scheduledAt: scheduledAt || null,
+  };
+  await fastify.db.insert(notifications).values(notification);
+
+  // Send via channels
+  for (const channel of channels) {
+    if (channel === NotificationChannel.PUSH) {
+      await fastify.push?.send(userId, title, message, referenceId, referenceType);
+    } else if (channel === NotificationChannel.EMAIL) {
+      await fastify.email?.send(userId, title, message);
+    } else if (channel === NotificationChannel.WHATSAPP) {
+      await fastify.whatsapp?.send(userId, message);
+    } 
+  }
+
+  // Mark as sent
+  await fastify.db.update(notifications).set({ status: NotificationStatus.SENT, updatedAt: new Date().toISOString() }).where(eq(notifications.id, id));
+
+  return await getNotificationById(id);
+}
+
+// Get all notifications for a user
+export async function getAll(userId: string, filters: any) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  let whereClause: any = [eq(notifications.userId, userId)];
+  if (filters.status) {
+    whereClause.push(eq(notifications.status, filters.status));
+  }
+  if (filters.type) {
+    whereClause.push(eq(notifications.type, filters.type));
+  }
+  if (filters.channel) {
+    whereClause.push(
+      (notifications: any) => notifications.channels.includes(filters.channel)
+    );
+  }
+  const results = await fastify.db.query.notifications.findMany({
+    where: and(...whereClause),
+    with: {
+      user: true,
+    },
+  });
+  return results;
+}
+
+// Get notification by ID
+export async function getNotificationById(id: string) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  const result = await fastify.db.query.notifications.findFirst({
+    where: eq(notifications.id, id),
+    with: {
+      user: true,
+    },
+  });
+  return result;
+}
+
+// Mark notification as read
+export async function markAsRead(id: string, userId: string) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  const notification = await getNotificationById(id);
+  if (!notification) throw notFound('Notification');
+  if (notification.userId !== userId) throw notFound('Notification');
+  await fastify.db.update(notifications).set({ status: NotificationStatus.READ, updatedAt: new Date().toISOString() }).where(eq(notifications.id, id));
+  return await getNotificationById(id);
 }

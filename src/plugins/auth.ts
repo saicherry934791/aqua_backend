@@ -20,7 +20,7 @@ declare module 'fastify' {
       request: FastifyRequest,
       reply: any
     ) => Promise<void>;
-    
+
     authorizeRoles: (
       roles: UserRole[]
     ) => (request: FastifyRequest, reply: any) => Promise<void>;
@@ -29,23 +29,30 @@ declare module 'fastify' {
 
 export default fp(async function (fastify: FastifyInstance) {
   // Register JWT verification function
-  fastify.decorate('authenticate', async function(request: FastifyRequest, reply: any) {
+  fastify.decorate('authenticate', async function (request: FastifyRequest, reply: any) {
     try {
-      await request.jwtVerify();
+
+      console.log('here token is ',request.headers.authorization)
+      const decoded = await request.jwtVerify();
+      console.log('here in jwt decoded ', decoded);
+      request.user = decoded;
+      console.log("request.user ", request.user);
     } catch (err) {
-      reply.status(401).send({ 
-        statusCode: 401, 
-        error: 'Unauthorized', 
-        message: 'Invalid or expired token' 
+      reply.status(401).send({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Invalid or expired token'
       });
     }
   });
 
   // Role-based access control middleware
-  fastify.decorate('authorizeRoles', function(roles: UserRole[]) {
-    return async function(request: FastifyRequest, reply: any) {
+  fastify.decorate('authorizeRoles', function (roles: UserRole[]) {
+    return async function (request: FastifyRequest, reply: any) {
       try {
         await request.jwtVerify();
+
+        console.log('roles')
 
         // Check if the user role is allowed
         if (!roles.includes(request.user.role)) {
@@ -56,10 +63,10 @@ export default fp(async function (fastify: FastifyInstance) {
           });
         }
       } catch (err) {
-        reply.status(401).send({ 
-          statusCode: 401, 
-          error: 'Unauthorized', 
-          message: 'Invalid or expired token' 
+        reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Invalid or expired token'
         });
       }
     };

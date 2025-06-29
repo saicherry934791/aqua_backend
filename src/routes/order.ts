@@ -35,7 +35,9 @@ export default async function (fastify: FastifyInstance) {
       schema: getUserOrdersSchema,
       preHandler: [fastify.authenticate],
     },
-    getUserOrders
+    (request, reply) => {
+      return getUserOrders(request as any, reply as any);
+    }
   );
 
   // Create new order
@@ -45,7 +47,9 @@ export default async function (fastify: FastifyInstance) {
       schema: createOrderSchema,
       preHandler: [fastify.authenticate],
     },
-    createOrder
+    (request, reply) => {
+      return createOrder(request as any, reply as any);
+    }
   );
 
   // Get order by ID (with permission check in controller)
@@ -55,7 +59,9 @@ export default async function (fastify: FastifyInstance) {
       schema: getOrderByIdSchema,
       preHandler: [fastify.authenticate],
     },
-    getOrderById
+    (request, reply) => {
+      return getOrderById(request as any, reply as any);
+    }
   );
 
   // Cancel order (with permission check in controller)
@@ -65,7 +71,9 @@ export default async function (fastify: FastifyInstance) {
       schema: cancelOrderSchema,
       preHandler: [fastify.authenticate],
     },
-    cancelOrder
+    (request, reply) => {
+      return cancelOrder(request as any, reply as any);
+    }
   );
 
   // Initiate payment (with permission check in controller)
@@ -75,7 +83,9 @@ export default async function (fastify: FastifyInstance) {
       schema: initiatePaymentSchema,
       preHandler: [fastify.authenticate],
     },
-    initiatePayment
+    (request, reply) => {
+      return initiatePayment(request as any, reply as any);
+    }
   );
 
   // Verify payment
@@ -85,7 +95,9 @@ export default async function (fastify: FastifyInstance) {
       schema: verifyPaymentSchema,
       preHandler: [fastify.authenticate],
     },
-    verifyPayment
+    (request, reply) => {
+      return verifyPayment(request as any, reply as any);
+    }
   );
 
   // Admin, franchise owner, and service agent routes
@@ -97,7 +109,9 @@ export default async function (fastify: FastifyInstance) {
       schema: getAllOrdersSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],
     },
-    getAllOrders
+    (request, reply) => {
+      return getAllOrders(request as any, reply as any);
+    }
   );
 
   // Update order status (admin, franchise owner, or assigned service agent)
@@ -107,7 +121,9 @@ export default async function (fastify: FastifyInstance) {
       schema: updateOrderStatusSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER, UserRole.SERVICE_AGENT])],
     },
-    updateOrderStatus
+    (request, reply) => {
+      return updateOrderStatus(request as any, reply as any);
+    }
   );
 
   // Assign service agent (admin and franchise owner only)
@@ -117,7 +133,9 @@ export default async function (fastify: FastifyInstance) {
       schema: assignServiceAgentSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],
     },
-    assignServiceAgent
+    (request, reply) => {
+      return assignServiceAgent(request as any, reply as any);
+    }
   );
 
   // Update installation date (admin, franchise owner, or service agent)
@@ -127,7 +145,9 @@ export default async function (fastify: FastifyInstance) {
       schema: updateInstallationDateSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER, UserRole.SERVICE_AGENT])],
     },
-    updateInstallationDate
+    (request, reply) => {
+      return updateInstallationDate(request as any, reply as any);
+    }
   );
 
   fastify.log.info('Order routes registered');

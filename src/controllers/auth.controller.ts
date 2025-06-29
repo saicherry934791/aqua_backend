@@ -21,23 +21,15 @@ export async function requestOtp(
 }
 
 export async function login(
-  request: FastifyRequest<{ Body: LoginRequest }>,
+  request: FastifyRequest<{ Body: { idToken: string } }>,
   reply: FastifyReply
 ) {
   try {
-    const { phone, otpCode } = request.body;
-    const result = await authService.verifyOtp(phone, otpCode);
-
-    if (result.registrationRequired) {
-      return reply.code(202).send({
-        message: 'Registration required',
-        phone: result.phone,
-        firebaseUid: result.firebaseUid
-      });
-    }
-
-    return reply.code(200).send(result.authData);
+    const { idToken } = request.body;
+    const result = await authService.loginWithFirebase(request.server, idToken);
+    return reply.code(200).send(result);
   } catch (error) {
+    
     handleError(error, request, reply);
   }
 }
@@ -68,7 +60,7 @@ export async function refreshToken(
   try {
     const { refreshToken } = request.body;
     const result = await authService.refreshAccessToken(refreshToken);
-    
+
     return reply.code(200).send(result);
   } catch (error) {
     handleError(error, request, reply);
@@ -81,11 +73,11 @@ export async function verifyToken(
 ) {
   try {
     const user = await userService.getUserById(request.user.userId);
-    
+
     if (!user) {
       throw notFound('User');
     }
-    
+
     return reply.code(200).send({ user });
   } catch (error) {
     handleError(error, request, reply);
@@ -102,7 +94,7 @@ export async function logout(
 }
 
 export async function changeRole(
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { id: string },
     Body: { role: UserRole }
   }>,
@@ -116,14 +108,49 @@ export async function changeRole(
 
     const { id } = request.params;
     const { role } = request.body;
-    
+
     const user = await userService.updateUserRole(id, role);
-    
-    return reply.code(200).send({ 
+
+    return reply.code(200).send({
       message: 'User role updated successfully',
       user
     });
   } catch (error) {
     handleError(error, request, reply);
   }
+}
+
+export async function me(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    return reply.code(200).send({ user: request.user });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+
+}
+
+export async function checkRole(
+  request: FastifyRequest<{
+    Querystring: { phoneNumber: string }
+  }>,
+  reply: FastifyReply
+) {
+
+  try {
+
+    console.log("request.query is ",request.query)
+
+    const { phoneNumber } = request.query;
+
+    const result = await authService.checkRole(phoneNumber)
+    return reply.code(200).send(result)
+
+
+  } catch (error) {
+    handleError(error, request, reply)
+}
+
 }

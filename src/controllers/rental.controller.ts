@@ -8,7 +8,7 @@ export async function getAllRentals(
   request: FastifyRequest<{ Querystring: { status?: RentalStatus } }>,
   reply: FastifyReply
 ) {
-  try {
+try {
     const { status } = request.query;
     
     // Only admins and franchise owners can see all rentals

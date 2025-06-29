@@ -1,10 +1,11 @@
 import { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { users } from '../models/schema';
 import { User, UserRole, RegisterUserRequest, GeoLocation } from '../types';
 import { generateId } from '../utils/helpers';
-import { notFound, conflict, badRequest } from '../utils/errors';
+import { notFound, conflict, badRequest, forbidden } from '../utils/errors';
 import * as franchiseService from './franchise.service';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 export async function createUser(userData: RegisterUserRequest & { firebaseUid?: string }): Promise<User> {
   const fastify = (global as any).fastify as FastifyInstance;
@@ -52,10 +53,10 @@ export async function createUser(userData: RegisterUserRequest & { firebaseUid?:
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const result = await fastify.db.query.users.findFirst({
-    where: eq(fastify.db.query.users.id, id),
+    where: eq(users.id, id),
   });
 
   if (!result) {
@@ -187,4 +188,69 @@ export async function findFranchiseAreaForUser(location: GeoLocation): Promise<s
   // This would call a service to find which franchise area the location falls into
   // For now, we'll create a placeholder that would be implemented in franchise.service.ts
   return franchiseService.findFranchiseAreaForLocation(location);
+}
+
+// Get all users (with optional filters)
+export async function getAllUsers(filters: any) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  let whereClause: any = [];
+  if (filters.role) {
+    whereClause.push(eq(users.role, filters.role));
+  }
+  if (filters.isActive !== undefined) {
+    whereClause.push(eq(users.isActive, filters.isActive));
+  }
+  if (filters.franchiseAreaId) {
+    whereClause.push(eq(users.franchiseAreaId, filters.franchiseAreaId));
+  }
+  const results = await fastify.db.query.users.findMany({
+    where: whereClause.length ? and(...whereClause) : undefined,
+  });
+  return results;
+}
+
+// Update user profile
+export async function updateUserProfile(id: string, data: any, currentUser: any) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  // Only the user themselves or admin can update
+  if (currentUser.userId !== id && currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('You do not have permission to update this user');
+  }
+  const user = await getUserById(id);
+  if (!user) throw notFound('User');
+  const updateData: any = { updatedAt: new Date().toISOString() };
+  if (data.name) updateData.name = data.name;
+  if (data.email) updateData.email = data.email;
+  if (data.address !== undefined) updateData.address = data.address;
+  if (data.alternativePhone !== undefined) updateData.alternativePhone = data.alternativePhone;
+  if (data.location) {
+    updateData.locationLatitude = data.location.latitude;
+    updateData.locationLongitude = data.location.longitude;
+  }
+  await fastify.db.update(users).set(updateData).where(eq(users.id, id));
+  return await getUserById(id);
+}
+
+// Change user role (admin only)
+export async function changeUserRole(id: string, role: string, currentUser: any) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('Only admin can change user roles');
+  }
+  const user = await getUserById(id);
+  if (!user) throw notFound('User');
+  await fastify.db.update(users).set({ role, updatedAt: new Date().toISOString() }).where(eq(users.id, id));
+  return await getUserById(id);
+}
+
+// Set user active status (admin only)
+export async function setUserActive(id: string, isActive: boolean, currentUser: any) {
+  const fastify = (global as any).fastify as FastifyInstance;
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('Only admin can change user active status');
+  }
+  const user = await getUserById(id);
+  if (!user) throw notFound('User');
+  await fastify.db.update(users).set({ isActive, updatedAt: new Date().toISOString() }).where(eq(users.id, id));
+  return await getUserById(id);
 }

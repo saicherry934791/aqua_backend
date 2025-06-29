@@ -91,18 +91,41 @@ export const CreateProductResponseSchema = z.object({
   message: z.string(),
   product: ProductSchema,
 });
-
 export const createProductSchema = {
-  body: zodToJsonSchema(CreateProductRequestSchema),
+  consumes: ['multipart/form-data'],
+  // 👇 Swagger doc only – this won't be validated at runtime
+  body: {
+    type: 'object',
+    required: ['name', 'description', 'images', 'rentPrice', 'buyPrice', 'deposit'],
+    properties: {
+      name: { type: 'string' },
+      description: { type: 'string' },
+      rentPrice: { type: 'string' },
+      buyPrice: { type: 'string' },
+      deposit: { type: 'string' },
+      isRentable: { type: 'string', enum: ['true', 'false'] },
+      isPurchasable: { type: 'string', enum: ['true', 'false'] },
+      features: {
+        type: 'string',
+        description: 'JSON string of feature array'
+      },
+      images: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+      },
+    },
+  },
+  // ❗️Response schemas are fine – no change needed
   response: {
     201: zodToJsonSchema(CreateProductResponseSchema),
     400: zodToJsonSchema(ErrorResponseSchema),
     403: zodToJsonSchema(ErrorResponseSchema),
   },
-  tags: ["products"],
-  summary: "Create a new product",
-  description: "Create a new product (admin only)",
+  tags: ['products'],
+  summary: 'Create a new product',
+  description: 'Create a new product (admin only)',
   security: [{ bearerAuth: [] }],
+
 };
 
 // Update Product Schema
@@ -120,6 +143,7 @@ export const UpdateProductRequestSchema = z.object({
   isRentable: z.boolean().optional(),
   isPurchasable: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  existingImages:z.string().optional(),
   features: z.array(
     z.object({
       name: z.string(),
@@ -160,6 +184,9 @@ export const DeleteProductResponseSchema = z.object({
 
 export const deleteProductSchema = {
   params: zodToJsonSchema(DeleteProductParamsSchema),
+  body:zodToJsonSchema(z.object({
+    isActive :z.boolean()
+  })),
   response: {
     200: zodToJsonSchema(DeleteProductResponseSchema),
     403: zodToJsonSchema(ErrorResponseSchema),

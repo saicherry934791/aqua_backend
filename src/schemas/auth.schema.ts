@@ -31,8 +31,7 @@ export const requestOtpSchema = {
 
 // Login Schema
 export const LoginRequestSchema = z.object({
-  phone: z.string().regex(/^\d{10}$/, 'Phone number must be 10 digits'),
-  otpCode: z.string().min(4).max(6),
+  idToken: z.string(),
 });
 
 export const UserSchema = z.object({
@@ -43,9 +42,9 @@ export const UserSchema = z.object({
   address: z.string().nullable().optional(),
   alternativePhone: z.string().nullable().optional(),
   role: z.enum([
-    UserRole.ADMIN, 
-    UserRole.CUSTOMER, 
-    UserRole.FRANCHISE_OWNER, 
+    UserRole.ADMIN,
+    UserRole.CUSTOMER,
+    UserRole.FRANCHISE_OWNER,
     UserRole.SERVICE_AGENT
   ]),
   location: z.object({
@@ -78,7 +77,8 @@ export const loginSchema = {
     400: zodToJsonSchema(ErrorResponseSchema),
   },
   tags: ["auth"],
-  summary: "Verify OTP and login user",
+  summary: "Login or register with Firebase ID token",
+  description: "Login or register a user using a Firebase ID token from the frontend.",
 };
 
 // Registration Schema
@@ -161,9 +161,9 @@ export const logoutSchema = {
 // Change Role Schema
 export const ChangeRoleRequestSchema = z.object({
   role: z.enum([
-    UserRole.ADMIN, 
-    UserRole.CUSTOMER, 
-    UserRole.FRANCHISE_OWNER, 
+    UserRole.ADMIN,
+    UserRole.CUSTOMER,
+    UserRole.FRANCHISE_OWNER,
     UserRole.SERVICE_AGENT
   ]),
 });
@@ -187,3 +187,21 @@ export const changeRoleSchema = {
   tags: ["auth"],
   summary: "Change user role (admin only)",
 };
+
+export const checkRoleSchema = {
+  querystring: zodToJsonSchema(z.object({
+    phoneNumber: z.string()
+  })),
+
+  response: {
+    200: zodToJsonSchema(z.object({
+      role: z.string()
+    })),
+    400: zodToJsonSchema(ErrorResponseSchema),
+    403: zodToJsonSchema(ErrorResponseSchema),
+    404: zodToJsonSchema(ErrorResponseSchema),
+
+  },
+  tags: ["auth"],
+  summary: "To check role of users",
+}

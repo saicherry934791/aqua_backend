@@ -1,41 +1,40 @@
 import { FastifyInstance } from 'fastify';
-import {
-  requestOtp,
-  login,
-  register,
-  refreshToken,
-  verifyToken,
-  logout,
-  changeRole,
-} from '../controllers/auth.controller';
-import {
-  requestOtpSchema,
-  loginSchema,
-  registerSchema,
-  refreshTokenSchema,
-  meSchema,
-  logoutSchema,
-  changeRoleSchema,
-} from '../schemas/auth.schema';
+import { login, refreshToken, me, logout, changeRole,checkRole } from '../controllers/auth.controller';
+import { loginSchema, refreshTokenSchema, meSchema, logoutSchema, changeRoleSchema, checkRoleSchema } from '../schemas/auth.schema';
 import { UserRole } from '../types';
+import { eq } from 'drizzle-orm';
+import { pushSubscriptions } from '../models/schema';
 
 export default async function (fastify: FastifyInstance) {
-  // Public routes - no authentication required
-  fastify.post('/request-otp', { schema: requestOtpSchema }, requestOtp);
-  fastify.post('/login', { schema: loginSchema }, login);
-  fastify.post('/register', { schema: registerSchema }, register);
-  fastify.post('/refresh-token', { schema: refreshTokenSchema }, refreshToken);
+  // Login or register with Firebase ID token
+  fastify.post(
+    '/login',
+    {
+      schema: loginSchema,
+    },
+    login
+  );
 
-  // Protected routes - authentication required
+  // Refresh token
+  fastify.post(
+    '/refresh-token',
+    {
+      schema: refreshTokenSchema,
+    },
+    refreshToken
+  );
+
+  // Get current user
   fastify.get(
     '/me',
     {
       schema: meSchema,
       preHandler: [fastify.authenticate],
     },
-    verifyToken
+    me
   );
 
+  // Logout
   fastify.post(
     '/logout',
     {
@@ -45,14 +44,75 @@ export default async function (fastify: FastifyInstance) {
     logout
   );
 
-  // Admin only routes
+  fastify.get(
+    "/checkrole",
+    {
+     schema: checkRoleSchema
+    },
+    checkRole
+  )
+
+  // Change user role (admin only)
   fastify.patch(
-    '/users/:id/role',
+    '/:id/role',
     {
       schema: changeRoleSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN])],
     },
-    changeRole
+    (request, reply) => changeRole(request as any, reply as any)
+  );
+
+  // Register or update FCM push subscription for the authenticated user
+  fastify.post(
+    '/push-subscription',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['endpoint', 'p256dh', 'auth'],
+          properties: {
+            endpoint: { type: 'string' },
+            p256dh: { type: 'string' },
+            auth: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+            },
+          },
+        },
+        tags: ['auth'],
+        summary: 'Register or update FCM push subscription',
+        description: 'Register or update a device push subscription for the authenticated user',
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const userId = (request.user as any).userId;
+      const { endpoint, p256dh, auth } = request.body as any;
+      // Upsert logic: if exists, update; else, insert
+      const existing = await fastify.db.query.pushSubscriptions.findFirst({
+        where: eq(pushSubscriptions.endpoint, endpoint),
+      });
+      if (existing) {
+        await fastify.db.update(pushSubscriptions).set({ p256dh, auth, updatedAt: new Date().toISOString() }).where(eq(pushSubscriptions.id, existing.id));
+      } else {
+        await fastify.db.insert(pushSubscriptions).values({
+          id: `push_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+          userId,
+          endpoint,
+          p256dh,
+          auth,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      return reply.code(200).send({ message: 'Push subscription registered' });
+    }
   );
 
   fastify.log.info('Auth routes registered');

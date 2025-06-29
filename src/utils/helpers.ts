@@ -6,7 +6,8 @@ import { GeoLocation, GeoPolygon } from '../types';
  * @param prefix The prefix for the ID, e.g., 'user', 'product', etc.
  * @returns A unique ID string
  */
-export function generateId(prefix: string): string {
+export async function generateId(prefix: string): Promise<string> {
+  const { nanoid } = await import('nanoid');
   return `${prefix}_${nanoid(10)}`;
 }
 
@@ -17,7 +18,7 @@ export function generateId(prefix: string): string {
  * @returns true if the point is inside the polygon, false otherwise
  */
 export function isPointInPolygon(point: GeoLocation, polygon: GeoPolygon): boolean {
-  if (polygon.type !== 'Polygon' || !polygon.coordinates || !polygon.coordinates[0]) {
+  if (  !polygon.coordinates || !polygon.coordinates[0]) {
     return false;
   }
 

@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import * as productService from '../services/product.service';
 import { handleError, notFound, badRequest } from '../utils/errors';
 import { UserRole } from '../types';
+import { CreateProductRequestSchema } from '../schemas/product.schema';
 
 // Get all products
 export async function getAllProducts(
@@ -25,68 +26,73 @@ export async function getProductById(
   try {
     const { id } = request.params;
     const product = await productService.getProductById(id);
-    
+
     if (!product) {
       throw notFound('Product');
     }
-    
+
     return reply.code(200).send({ product });
   } catch (error) {
     handleError(error, request, reply);
   }
 }
 
-// Create product
-export async function createProduct(
-  request: FastifyRequest<{ 
-    Body: { 
-      name: string;
-      description: string;
-      images: string[];
-      rentPrice: number;
-      buyPrice: number;
-      deposit: number;
-      isRentable?: boolean;
-      isPurchasable?: boolean;
-      features?: { name: string; value: string; }[];
-    } 
-  }>,
-  reply: FastifyReply
-) {
+export async function createProduct(request: FastifyRequest, reply: FastifyReply) {
   try {
-    // Only admins can create products
     if (request.user.role !== UserRole.ADMIN) {
       throw badRequest('Not authorized to create products');
     }
 
-    const productData = request.body;
-    const product = await productService.createProduct(productData);
-    
-    return reply.code(201).send({ 
-      message: 'Product created successfully',
-      product
-    });
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field (likely "images")
+        const filename = `products/${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+        images.push(uploadedUrl);
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const parsedData = {
+      name: fields.name,
+      description: fields.description,
+      rentPrice: Number(fields.rentPrice),
+      buyPrice: Number(fields.buyPrice),
+      deposit: Number(fields.deposit),
+      isRentable: fields.isRentable === 'true',
+      isPurchasable: fields.isPurchasable === 'true',
+      isActive: fields.isActive === 'true',
+      features: [], // handle features if needed
+      images: images,
+    };
+
+    console.log('parsedData', parsedData);
+
+    const product = await productService.createProduct(parsedData);
+    return reply.code(201).send({ message: 'Product created', product, statusCode: 201 });
   } catch (error) {
+    console.error('error', error);
     handleError(error, request, reply);
   }
 }
 
+
 // Update product
 export async function updateProduct(
-  request: FastifyRequest<{ 
-    Params: { id: string },
-    Body: { 
-      name?: string;
-      description?: string;
-      images?: string[];
-      rentPrice?: number;
-      buyPrice?: number;
-      deposit?: number;
-      isRentable?: boolean;
-      isPurchasable?: boolean;
-      isActive?: boolean;
-      features?: { name: string; value: string; }[];
-    } 
+  request: FastifyRequest<{
+    Params: { id: string }
+   
   }>,
   reply: FastifyReply
 ) {
@@ -97,10 +103,45 @@ export async function updateProduct(
     }
 
     const { id } = request.params;
-    const productData = request.body;
-    const product = await productService.updateProduct(id, productData);
-    
-    return reply.code(200).send({ 
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field (likely "images")
+        const filename = `products/${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+        images.push(uploadedUrl);
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const parsedData = {
+      name: fields.name,
+      description: fields.description,
+      rentPrice: Number(fields.rentPrice),
+      buyPrice: Number(fields.buyPrice),
+      deposit: Number(fields.deposit),
+      isRentable: fields.isRentable === 'true',
+      isPurchasable: fields.isPurchasable === 'true',
+      isActive: fields.isActive === 'true',
+      features: [], // handle features if needed
+      images: images,
+      existingImages: fields.existingImages
+      ? JSON.parse(fields.existingImages)
+      : []
+    };
+    const product = await productService.updateProduct(id, parsedData);
+
+    return reply.code(200).send({
       message: 'Product updated successfully',
       product
     });
@@ -121,9 +162,13 @@ export async function deleteProduct(
     }
 
     const { id } = request.params;
-    await productService.updateProduct(id, { isActive: false });
-    
-    return reply.code(200).send({ 
+    console.log('body ',request.body)
+    const {isActive} = request.body;
+
+    console.log('id ',id)
+    await productService.updateProduct(id, { isActive: isActive });
+
+    return reply.code(200).send({
       message: 'Product deleted successfully',
       id
     });
@@ -134,7 +179,7 @@ export async function deleteProduct(
 
 // Upload product image
 export async function uploadProductImage(
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { id: string }
   }>,
   reply: FastifyReply
@@ -146,7 +191,7 @@ export async function uploadProductImage(
     }
 
     const { id } = request.params;
-    
+
     // Get the file from the request
     const file = await request.file();
     if (!file) {
@@ -175,7 +220,7 @@ export async function uploadProductImage(
 
     await productService.updateProduct(id, { images });
 
-    return reply.code(200).send({ 
+    return reply.code(200).send({
       message: 'Product image uploaded successfully',
       imageUrl
     });
@@ -192,7 +237,7 @@ export async function getProductFeatures(
   try {
     const { id } = request.params;
     const features = await productService.getProductFeatures(id);
-    
+
     return reply.code(200).send({ features });
   } catch (error) {
     handleError(error, request, reply);
@@ -201,9 +246,9 @@ export async function getProductFeatures(
 
 // Add product feature
 export async function addProductFeature(
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { id: string },
-    Body: { name: string; value: string; } 
+    Body: { name: string; value: string; }
   }>,
   reply: FastifyReply
 ) {
@@ -216,8 +261,8 @@ export async function addProductFeature(
     const { id } = request.params;
     const featureData = request.body;
     const feature = await productService.addProductFeature(id, featureData);
-    
-    return reply.code(201).send({ 
+
+    return reply.code(201).send({
       message: 'Product feature added successfully',
       feature
     });
@@ -228,9 +273,9 @@ export async function addProductFeature(
 
 // Update product feature
 export async function updateProductFeature(
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { id: string; featureId: string },
-    Body: { name?: string; value?: string; } 
+    Body: { name?: string; value?: string; }
   }>,
   reply: FastifyReply
 ) {
@@ -243,8 +288,8 @@ export async function updateProductFeature(
     const { id, featureId } = request.params;
     const featureData = request.body;
     const feature = await productService.updateProductFeature(id, featureId, featureData);
-    
-    return reply.code(200).send({ 
+
+    return reply.code(200).send({
       message: 'Product feature updated successfully',
       feature
     });
@@ -266,8 +311,8 @@ export async function deleteProductFeature(
 
     const { id, featureId } = request.params;
     await productService.deleteProductFeature(id, featureId);
-    
-    return reply.code(200).send({ 
+
+    return reply.code(200).send({
       message: 'Product feature deleted successfully',
       id,
       featureId

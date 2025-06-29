@@ -30,6 +30,8 @@ export default fp(async function (fastify: FastifyInstance) {
     // Add the database client to the Fastify instance
     fastify.decorate('db', db);
 
+    console.log(await db.select().from(schema.users))
+
     // Add a hook to close the database connection when the server is shutting down
     fastify.addHook('onClose', async () => {
       await client.close();

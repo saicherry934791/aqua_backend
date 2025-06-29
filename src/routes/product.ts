@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   getAllProducts,
   getProductById,
@@ -22,6 +22,7 @@ import {
   updateProductFeatureSchema,
   deleteProductFeatureSchema,
   uploadProductImageSchema,
+  CreateProductRequestSchema,
 } from '../schemas/product.schema';
 import { UserRole } from '../types';
 
@@ -31,14 +32,15 @@ export default async function (fastify: FastifyInstance) {
   fastify.get('/:id', { schema: getProductByIdSchema }, getProductById);
   fastify.get('/:id/features', { schema: getProductFeaturesSchema }, getProductFeatures);
 
+
   // Admin only routes
   fastify.post(
-    '/',
-    {
+    '/',{
       schema: createProductSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN])],
+      validatorCompiler: () => () => true
     },
-    createProduct
+    async (request, reply) => createProduct(request as any, reply as any)
   );
 
   fastify.put(
@@ -46,8 +48,9 @@ export default async function (fastify: FastifyInstance) {
     {
       schema: updateProductSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN])],
+      validatorCompiler: () => () => true
     },
-    updateProduct
+    async (request:FastifyRequest,reply:FastifyReply)=> updateProduct(request,reply)
   );
 
   fastify.delete(
@@ -56,7 +59,7 @@ export default async function (fastify: FastifyInstance) {
       schema: deleteProductSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN])],
     },
-    deleteProduct
+    async (request:FastifyRequest,reply:FastifyReply)=>deleteProduct(request,reply)
   );
 
   // Product features routes - admin only

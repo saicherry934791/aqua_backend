@@ -1,5 +1,6 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
-import { sql } from "drizzle-orm";
+import { sqliteTable, text, integer, real, uniqueIndex, primaryKey } from "drizzle-orm/sqlite-core";
+import { InferSelectModel, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   UserRole,
   OrderType,
@@ -18,8 +19,8 @@ import {
 export const franchiseAreas = sqliteTable("franchise_areas", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  description: text("description"),
-  geoPolygon: text("geo_polygon").notNull(), // Store as GeoJSON string
+  city: text("city").notNull(),
+  geoPolygon: text("geo_polygon", { mode: 'json' }).notNull(),
   ownerId: text("owner_id"),
   isCompanyManaged: integer("is_company_managed", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -28,22 +29,31 @@ export const franchiseAreas = sqliteTable("franchise_areas", {
 });
 
 /* Users */
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  phone: text("phone").notNull().unique(),
-  name: text("name").notNull(),
-  email: text("email"),
-  address: text("address"),
-  alternativePhone: text("alternative_phone"),
-  role: text("role", { enum: Object.values(UserRole) }).notNull().default(UserRole.CUSTOMER),
-  locationLatitude: real("location_latitude"),
-  locationLongitude: real("location_longitude"),
-  franchiseAreaId: text("franchise_area_id").references(() => franchiseAreas.id),
-  firebaseUid: text("firebase_uid"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-});
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(), // ✅ make 'id' the primary key
+
+    phone: text("phone").notNull(),
+    role: text("role", { enum: Object.values(UserRole) }).notNull().default(UserRole.CUSTOMER),
+
+    name: text("name"),
+    email: text("email"),
+    address: text("address"),
+    alternativePhone: text("alternative_phone"),
+    locationLatitude: real("location_latitude"),
+    locationLongitude: real("location_longitude"),
+    franchiseAreaId: text("franchise_area_id").references(() => franchiseAreas.id),
+    firebaseUid: text("firebase_uid"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (users) => ({
+    uniquePhoneRole: uniqueIndex("unique_phone_role").on(users.phone, users.role),
+  })
+);
+
 
 /* Products */
 export const products = sqliteTable("products", {
@@ -70,6 +80,8 @@ export const productFeatures = sqliteTable("product_features", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
+
+
 
 /* Orders */
 export const orders = sqliteTable("orders", {
@@ -160,3 +172,34 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
+
+
+export const productRelations = relations(products, ({ many }) => ({
+  features: many(productFeatures),
+}));
+
+export const productFeatureRelations = relations(productFeatures, ({ one }) => ({
+  product: one(products, {
+    fields: [productFeatures.productId],
+    references: [products.id],
+  }),
+}));
+
+
+export const usersRelations = relations(users, ({ one }) => ({
+  franchiseArea: one(franchiseAreas, {
+    fields: [users.franchiseAreaId],
+    references: [franchiseAreas.id],
+  }),
+}));
+
+export const franchiseAreaRelations = relations(franchiseAreas, ({ many }) => ({
+  owner: many(users),
+}));
+
+
+
+
+
+export type franchiseArea = InferSelectModel<typeof franchiseAreas>;
+export type User = InferSelectModel<typeof users>;
