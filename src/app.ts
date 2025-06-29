@@ -45,7 +45,7 @@ export const app = fastify({
   ajv: {
     customOptions: {},
     plugins: [
-      (ajv) => ajvFilePlugin(ajv) // ✅ RETURN the ajv instance
+      (ajv: any) => ajvFilePlugin(ajv) // ✅ RETURN the ajv instance
     ]
   }
 });
@@ -173,10 +173,10 @@ app.setErrorHandler((error, request, reply) => {
   }
 
   // Custom errors
-  if (error.statusCode) {
-    return reply.status(error.statusCode).send({
-      statusCode: error.statusCode,
-      error: error.error || 'Error',
+  if ((error as any).statusCode) {
+    return reply.status((error as any).statusCode).send({
+      statusCode: (error as any).statusCode,
+      error: (error as any).error || 'Error',
       message: error.message,
     });
   }

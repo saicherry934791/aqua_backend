@@ -33,7 +33,7 @@ export default fp(async function (fastify: FastifyInstance) {
     try {
 
       console.log('here token is ',request.headers.authorization)
-      const decoded = await request.jwtVerify();
+      const decoded = await request.jwtVerify() as { userId: string; role: UserRole; franchiseAreaId?: string; };
       console.log('here in jwt decoded ', decoded);
       request.user = decoded;
       console.log("request.user ", request.user);
