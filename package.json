@@ -1,6 +1,7 @@
 {
   "name": "purifiler-backend",
   "version": "1.0.0",
+  "type": "commonjs",
   "description": "PuriFiler Water Purifier Rental/Sales Management System Backend",
   "main": "dist/server.js",
   "scripts": {
