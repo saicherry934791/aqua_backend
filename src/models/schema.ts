@@ -81,7 +81,25 @@ export const productFeatures = sqliteTable("product_features", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-
+/* Coupons */
+export const coupons = sqliteTable("coupons", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  code: text("code").notNull().unique(),
+  type: text("type").notNull(), // discount, free_service, etc.
+  discountPercentage: integer("discount_percentage"),
+  discountAmount: integer("discount_amount"),
+  minOrderAmount: integer("min_order_amount"),
+  maxDiscountAmount: integer("max_discount_amount"),
+  validFrom: text("valid_from").notNull(),
+  validTo: text("valid_to").notNull(),
+  usageLimit: integer("usage_limit"),
+  usedCount: integer("used_count").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
 
 /* Orders */
 export const orders = sqliteTable("orders", {
