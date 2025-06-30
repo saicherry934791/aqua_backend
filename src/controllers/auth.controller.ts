@@ -21,12 +21,12 @@ export async function requestOtp(
 }
 
 export async function login(
-  request: FastifyRequest<{ Body: { idToken: string } }>,
+  request: FastifyRequest<{ Body: { idToken: string; role: UserRole } }>,
   reply: FastifyReply
 ) {
   try {
-    const { idToken } = request.body;
-    const result = await authService.loginWithFirebase(request.server, idToken);
+    const { idToken, role } = request.body;
+    const result = await authService.loginWithFirebase(request.server, idToken, role);
     return reply.code(200).send(result);
   } catch (error) {
     
@@ -134,7 +134,7 @@ export async function me(
 
 export async function checkRole(
   request: FastifyRequest<{
-    Querystring: { phoneNumber: string }
+    Querystring: { phoneNumber: string; role: UserRole }
   }>,
   reply: FastifyReply
 ) {
@@ -143,9 +143,9 @@ export async function checkRole(
 
     console.log("request.query is ",request.query)
 
-    const { phoneNumber } = request.query;
+    const { phoneNumber, role } = request.query;
 
-    const result = await authService.checkRole(phoneNumber)
+    const result = await authService.checkRole(phoneNumber, role)
     return reply.code(200).send(result)
 
 

@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import * as userService from './user.service';
 import admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { users } from '../models/schema';
 import { getFastifyInstance } from '../shared/fastify-instance';
 
@@ -169,7 +169,7 @@ export function verifyRole(userRole: UserRole, requiredRoles: UserRole[]): boole
   return requiredRoles.includes(userRole);
 }
 
-export async function loginWithFirebase(fastify: any, idToken: string) {
+export async function loginWithFirebase(fastify: any, idToken: string, role: UserRole) {
   try {
     console.log('came here ')
     const decodedToken = await admin.auth().verifyIdToken(idToken);
@@ -180,12 +180,15 @@ export async function loginWithFirebase(fastify: any, idToken: string) {
       throw new Error('User not found in Firebase');
     }
   
-    // Check if user exists
+    // Check if user exists with specific phone and role combination
     let user = await db.query.users.findFirst({
-      where: eq(users.phone, userFromFirebase.phoneNumber),
+      where: and(
+        eq(users.phone, userFromFirebase.phoneNumber),
+        eq(users.role, role)
+      ),
     });
 
-    // If user doesn't exist, create a new user
+    // If user doesn't exist with this phone-role combination, create a new user
     if (!user) {
       const userId = uuidv4();
       const now = new Date();
@@ -194,7 +197,7 @@ export async function loginWithFirebase(fastify: any, idToken: string) {
         email: userFromFirebase.email || '',
         name: userFromFirebase.displayName || '',
         phone: userFromFirebase.phoneNumber || '',
-        role: 'customer',
+        role: role,
         firebaseUid: decodedToken.uid,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
@@ -218,7 +221,7 @@ export async function loginWithFirebase(fastify: any, idToken: string) {
   }
 }
 
-export async function checkRole(phoneNumber: string) {
+export async function checkRole(phoneNumber: string, role: UserRole) {
   try {
     const fastify = getFastifyInstance() as FastifyInstance;
     const db = fastify.db;
@@ -228,16 +231,25 @@ export async function checkRole(phoneNumber: string) {
     const samplecall = await db.select().from(users);
     console.log('samplecall ', samplecall)
     const user = await db.query.users.findFirst({
-      where: eq(users.phone, phoneNumber)
+      where: and(
+        eq(users.phone, phoneNumber),
+        eq(users.role, role)
+      )
     })
 
     if (user) {
       return {
-        role: user.role
+        exists: true,
+        role: user.role,
+        userId: user.id
       }
     }
 
-    return notFound("User Not Found");
+    return {
+      exists: false,
+      role: null,
+      userId: null
+    };
 
 
   } catch (error) {

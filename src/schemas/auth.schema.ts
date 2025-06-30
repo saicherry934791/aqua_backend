@@ -32,6 +32,12 @@ export const requestOtpSchema = {
 // Login Schema
 export const LoginRequestSchema = z.object({
   idToken: z.string(),
+  role: z.enum([
+    UserRole.ADMIN,
+    UserRole.CUSTOMER,
+    UserRole.FRANCHISE_OWNER,
+    UserRole.SERVICE_AGENT
+  ]),
 });
 
 export const UserSchema = z.object({
@@ -77,8 +83,8 @@ export const loginSchema = {
     400: zodToJsonSchema(ErrorResponseSchema),
   },
   tags: ["auth"],
-  summary: "Login or register with Firebase ID token",
-  description: "Login or register a user using a Firebase ID token from the frontend.",
+  summary: "Login or register with Firebase ID token and role",
+  description: "Login or register a user using a Firebase ID token from the frontend with specific role.",
 };
 
 // Registration Schema
@@ -190,12 +196,20 @@ export const changeRoleSchema = {
 
 export const checkRoleSchema = {
   querystring: zodToJsonSchema(z.object({
-    phoneNumber: z.string()
+    phoneNumber: z.string(),
+    role: z.enum([
+      UserRole.ADMIN,
+      UserRole.CUSTOMER,
+      UserRole.FRANCHISE_OWNER,
+      UserRole.SERVICE_AGENT
+    ])
   })),
 
   response: {
     200: zodToJsonSchema(z.object({
-      role: z.string()
+      exists: z.boolean(),
+      role: z.string().nullable(),
+      userId: z.string().nullable()
     })),
     400: zodToJsonSchema(ErrorResponseSchema),
     403: zodToJsonSchema(ErrorResponseSchema),
@@ -203,5 +217,5 @@ export const checkRoleSchema = {
 
   },
   tags: ["auth"],
-  summary: "To check role of users",
+  summary: "Check if user exists with specific phone and role combination",
 }
