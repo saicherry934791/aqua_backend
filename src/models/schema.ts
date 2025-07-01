@@ -45,6 +45,7 @@ export const users = sqliteTable(
     locationLongitude: real("location_longitude"),
     franchiseAreaId: text("franchise_area_id").references(() => franchiseAreas.id),
     firebaseUid: text("firebase_uid"),
+    hasOnboarded: integer("has_onboarded", { mode: "boolean" }).notNull().default(false),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),

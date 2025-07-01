@@ -102,6 +102,7 @@ export interface User {
   role: UserRole;
   location?: GeoLocation;
   franchiseAreaId?: string;
+  hasOnboarded: boolean;
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;
@@ -249,6 +250,15 @@ export interface RegisterUserRequest {
   address?: string;
   alternativePhone?: string;
   location?: GeoLocation;
+}
+
+export interface OnboardUserRequest {
+  name: string;
+  email?: string;
+  address?: string;
+  alternativePhone?: string;
+  latitude: number;
+  longitude: number;
 }
 
 export interface FirebaseUser {

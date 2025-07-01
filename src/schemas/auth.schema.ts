@@ -58,6 +58,7 @@ export const UserSchema = z.object({
     longitude: z.number(),
   }).nullable().optional(),
   franchiseAreaId: z.string().nullable().optional(),
+  hasOnboarded: z.boolean(),
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -116,6 +117,34 @@ export const registerSchema = {
   },
   tags: ["auth"],
   summary: "Register a new user",
+};
+
+// Onboard User Schema
+export const OnboardUserRequestSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email().optional(),
+  address: z.string().min(5, 'Address must be at least 5 characters'),
+  alternativePhone: z.string().regex(/^\d{10}$/, 'Alternative phone must be 10 digits').optional(),
+  latitude: z.number().min(-90).max(90, 'Invalid latitude'),
+  longitude: z.number().min(-180).max(180, 'Invalid longitude'),
+});
+
+export const OnboardUserResponseSchema = z.object({
+  message: z.string(),
+  user: UserSchema,
+});
+
+export const onboardUserSchema = {
+  body: zodToJsonSchema(OnboardUserRequestSchema),
+  response: {
+    200: zodToJsonSchema(OnboardUserResponseSchema),
+    400: zodToJsonSchema(ErrorResponseSchema),
+    401: zodToJsonSchema(ErrorResponseSchema),
+  },
+  tags: ["auth"],
+  summary: "Complete user onboarding",
+  description: "Complete the onboarding process for an authenticated user",
+  security: [{ bearerAuth: [] }],
 };
 
 // Refresh Token Schema

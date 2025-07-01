@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { LoginRequest, RegisterUserRequest, UserRole } from '../types';
+import { LoginRequest, RegisterUserRequest, UserRole, OnboardUserRequest } from '../types';
 import * as authService from '../services/auth.service';
 import * as userService from '../services/user.service';
 import { handleError, badRequest, notFound } from '../utils/errors';
@@ -47,6 +47,31 @@ export async function register(
       message: 'User registered successfully',
       user,
       ...tokens
+    });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}
+
+export async function onboardUser(
+  request: FastifyRequest<{ Body: OnboardUserRequest }>,
+  reply: FastifyReply
+) {
+  try {
+    const { name, email, address, alternativePhone, latitude, longitude } = request.body;
+    const userId = request.user.userId;
+
+    const updatedUser = await userService.onboardUser(userId, {
+      name,
+      email,
+      address,
+      alternativePhone,
+      location: { latitude, longitude }
+    });
+
+    return reply.code(200).send({
+      message: 'User onboarding completed successfully',
+      user: updatedUser
     });
   } catch (error) {
     handleError(error, request, reply);

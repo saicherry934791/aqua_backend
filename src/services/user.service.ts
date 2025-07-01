@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import { users } from '../models/schema';
-import { User, UserRole, RegisterUserRequest, GeoLocation } from '../types';
+import { User, UserRole, RegisterUserRequest, GeoLocation, OnboardUserRequest } from '../types';
 import { generateId } from '../utils/helpers';
 import { notFound, conflict, badRequest, forbidden } from '../utils/errors';
 import * as franchiseService from './franchise.service';
@@ -32,6 +32,7 @@ export async function createUser(userData: RegisterUserRequest & { firebaseUid?:
     role: UserRole.CUSTOMER, // Default role for new registrations
     location: userData.location,
     franchiseAreaId,
+    hasOnboarded: false, // Default to false for new users
     isActive: true,
     firebaseUid: userData.firebaseUid,
     createdAt: new Date().toISOString(),
@@ -50,6 +51,57 @@ export async function createUser(userData: RegisterUserRequest & { firebaseUid?:
   }
 
   return createdUser;
+}
+
+export async function onboardUser(
+  userId: string, 
+  onboardData: {
+    name: string;
+    email?: string;
+    address?: string;
+    alternativePhone?: string;
+    location?: GeoLocation;
+  }
+): Promise<User> {
+  const fastify = getFastifyInstance();
+  
+  const user = await getUserById(userId);
+  if (!user) {
+    throw notFound('User');
+  }
+
+  // Find franchise area for the user's location if provided
+  let franchiseAreaId = user.franchiseAreaId;
+  if (onboardData.location) {
+    franchiseAreaId = await findFranchiseAreaForUser(onboardData.location);
+  }
+
+  const updateData: any = {
+    name: onboardData.name,
+    hasOnboarded: true,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (onboardData.email) updateData.email = onboardData.email;
+  if (onboardData.address) updateData.address = onboardData.address;
+  if (onboardData.alternativePhone) updateData.alternativePhone = onboardData.alternativePhone;
+  if (onboardData.location) {
+    updateData.locationLatitude = onboardData.location.latitude;
+    updateData.locationLongitude = onboardData.location.longitude;
+  }
+  if (franchiseAreaId) updateData.franchiseAreaId = franchiseAreaId;
+
+  await fastify.db
+    .update(users)
+    .set(updateData)
+    .where(eq(users.id, userId));
+
+  const updatedUser = await getUserById(userId);
+  if (!updatedUser) {
+    throw new Error('Failed to update user');
+  }
+
+  return updatedUser;
 }
 
 export async function getUserById(id: string): Promise<User | null> {

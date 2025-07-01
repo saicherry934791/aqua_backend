@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import { login, refreshToken, me, logout, changeRole,checkRole } from '../controllers/auth.controller';
-import { loginSchema, refreshTokenSchema, meSchema, logoutSchema, changeRoleSchema, checkRoleSchema } from '../schemas/auth.schema';
+import { login, refreshToken, me, logout, changeRole, checkRole, onboardUser } from '../controllers/auth.controller';
+import { loginSchema, refreshTokenSchema, meSchema, logoutSchema, changeRoleSchema, checkRoleSchema, onboardUserSchema } from '../schemas/auth.schema';
 import { UserRole } from '../types';
 import { eq } from 'drizzle-orm';
 import { pushSubscriptions } from '../models/schema';
@@ -13,6 +13,16 @@ export default async function (fastify: FastifyInstance) {
       schema: loginSchema,
     },
     login
+  );
+
+  // Onboard user (complete profile after login)
+  fastify.post(
+    '/onboard',
+    {
+      schema: onboardUserSchema,
+      preHandler: [fastify.authenticate],
+    },
+    onboardUser
   );
 
   // Refresh token
