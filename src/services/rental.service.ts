@@ -271,7 +271,7 @@ export async function initiateRenewalPayment(rentalId: string) {
   }
   
   // Create a payment record for the renewal
-  const paymentId = await generateId('pay');
+  const paymentId = await await generateId('pay');
   
   await fastify.db.insert(payments).values({
     id: paymentId,

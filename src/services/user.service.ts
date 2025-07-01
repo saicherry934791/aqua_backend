@@ -23,7 +23,7 @@ export async function createUser(userData: RegisterUserRequest & { firebaseUid?:
   }
 
   const newUser: Omit<User, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string } = {
-    id: generateId('user'),
+    id: await generateId('user'),
     phone: userData.phone,
     name: userData.name,
     email: userData.email,

@@ -60,7 +60,7 @@ export async function verifyOtp(
     // const firebaseUid = result.uid;
 
     // For demo purposes, we'll create a mock Firebase UID
-    const firebaseUid = `firebase_${generateId('user')}`;
+    const firebaseUid = `firebase_${await generateId('user')}`;
 
     // Check if user exists
     const user = await userService.getUserByPhone(phone);

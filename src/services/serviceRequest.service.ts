@@ -61,7 +61,7 @@ export async function getServiceRequestById(id: string) {
 // Create a new service request
 export async function createServiceRequest(data: any, user: any) {
   const fastify = getFastifyInstance()
-  const id = generateId('srq');
+  const id = await generateId('srq');
   const now = new Date().toISOString();
 
   // Get product and franchise area

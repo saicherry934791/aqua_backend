@@ -300,15 +300,15 @@ export async function initiatePayment(
     if (!order) {
       throw notFound('Order');
     }
+    //todo
+    // // Only the customer or admin can initiate payment
+    // const hasPermission = 
+    //   request.user.role === UserRole.ADMIN || 
+    //   order.customerId === request.user.userId;
     
-    // Only the customer or admin can initiate payment
-    const hasPermission = 
-      request.user.role === UserRole.ADMIN || 
-      order.customerId === request.user.userId;
-    
-    if (!hasPermission) {
-      throw forbidden('You do not have permission to make payment for this order');
-    }
+    // if (!hasPermission) {
+    //   throw forbidden('You do not have permission to make payment for this order');
+    // }
     
     const paymentInfo = await orderService.initiatePayment(id);
     

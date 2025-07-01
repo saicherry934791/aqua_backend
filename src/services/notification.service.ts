@@ -40,7 +40,7 @@ export async function sendNotification(
   }
   
   // Create notification record
-  const notificationId = generateId('notif');
+  const notificationId = await generateId('notif');
   
   await fastify.db.insert(notifications).values({
     id: notificationId,
@@ -187,7 +187,7 @@ export async function send(
   scheduledAt?: string
 ) {
   const fastify = getFastifyInstance()
-  const id = generateId('ntf');
+  const id = await await generateId('ntf');
   const now = new Date().toISOString();
   const notification = {
     id,

@@ -15,7 +15,7 @@ export const serviceAgentAddToDB = async (data: ServiceAgentInput) => {
 
     console.log('data in adding agent is ',data)
     await db.insert(users).values({
-        id: await generateId('agent'),
+        id: await await generateId('agent'),
         name: data.name,
         phone: data.number,
         email: data.email || null,

@@ -5,7 +5,7 @@ import { GeoLocation, GeoPolygon } from '../types';
  * @param prefix The prefix for the ID, e.g., 'user', 'product', etc.
  * @returns A unique ID string
  */
-export async function generateId(prefix: string): Promise<string> {
+export async function  generateId(prefix: string): Promise<string> {
   const id = Array.from(crypto.getRandomValues(new Uint8Array(10)))
     .map(b => b.toString(36).padStart(2, '0'))
     .join('')

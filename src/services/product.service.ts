@@ -67,7 +67,7 @@ export async function createProduct(data: {
 }) {
   const fastify = getFastifyInstance()
 
-  const id = await generateId('prod');
+  const id = await await generateId('prod');
 
 
   console.log('came here ')
@@ -96,7 +96,7 @@ export async function createProduct(data: {
     // Insert features in batch (if any)
     if (data.features?.length) {
       const featureRows = data.features.map(async (feature) => ({
-        id: await generateId('feat'),
+        id: await await generateId('feat'),
         productId: product.id,
         name: feature.name,
         value: feature.value,
@@ -174,7 +174,7 @@ export async function addProductFeature(productId: string, data: { name: string;
     throw notFound('Product');
   }
 
-  const id = generateId('feat');
+  const id = await generateId('feat');
 
   await fastify.db.insert(productFeatures).values({
     id,
