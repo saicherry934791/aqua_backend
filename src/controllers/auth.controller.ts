@@ -66,7 +66,7 @@ export async function onboardUser(
       email,
       address,
       alternativePhone,
-      location: { latitude, longitude }
+      location: { latitude, longitude },
     });
 
     return reply.code(200).send({

@@ -11,7 +11,8 @@ export async function getAllProducts(
 ) {
   try {
     const { isActive } = request.query;
-    const products = await productService.getAllProducts(isActive !== undefined ? isActive === true : true);
+    const products = await productService.getAllProducts(false);
+
     return reply.code(200).send({ products });
   } catch (error) {
     handleError(error, request, reply);

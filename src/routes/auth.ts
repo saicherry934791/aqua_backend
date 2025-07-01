@@ -22,7 +22,7 @@ export default async function (fastify: FastifyInstance) {
       schema: onboardUserSchema,
       preHandler: [fastify.authenticate],
     },
-    onboardUser
+    (request, reply) => onboardUser(request as any, reply as any)
   );
 
   // Refresh token
