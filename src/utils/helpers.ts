@@ -1,4 +1,3 @@
-import { nanoid } from 'nanoid';
 import { GeoLocation, GeoPolygon } from '../types';
 
 /**
