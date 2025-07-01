@@ -17,13 +17,18 @@ export async function getFranchiseAreaById(id: string) {
 
   const result = await fastify.db.query.franchiseAreas.findFirst({
     where: eq(franchiseAreas.id, id),
-    with: {
-      owner: true,
-    },
   });
 
   if (!result) {
     return null;
+  }
+
+  // Get owner separately to avoid relation issues
+  let owner = null;
+  if (result.ownerId) {
+    owner = await fastify.db.query.users.findFirst({
+      where: eq(users.id, result.ownerId),
+    });
   }
 
   return {
@@ -40,7 +45,7 @@ export async function getFranchiseAreaById(id: string) {
     isActive: result.isActive,
     revenue: 0,
     serviceAgentCount: 0,
-    ownerName: result.owner?.name || "Company"
+    ownerName: owner?.name || "Company"
   };
 }
 
@@ -92,59 +97,65 @@ export async function createFranchiseArea(data: any) {
     const db = getFastifyInstance().db;
     const now = new Date().toISOString();
 
+    // Check if phone number already exists for franchise owner
     if (phoneNumber) {
-      const user = await db.query.users.findFirst({
+      const existingUser = await db.query.users.findFirst({
         where: and(eq(users.phone, phoneNumber), eq(users.role, UserRole.FRANCHISE_OWNER))
       });
 
-      if (user) {
-        throw conflict("Franchise with phone number already present");
+      if (existingUser) {
+        throw conflict("Franchise owner with this phone number already exists");
       }
     }
 
     // Normalize and store polygon coordinates
     const normalizedPolygon = normalizePolygonCoordinates(geoPolygon);
-
-    // Create franchise area
     const franchiseAreaId = uuidv4();
+    let ownerId: string | null = null;
+
+    // Create franchise area and owner in transaction
     const createdFranchiseArea = await db.transaction(async (tx) => {
-      const [createdFranchiseArea] = await tx
+      // Create franchise owner first if phone number provided
+      if (phoneNumber) {
+        ownerId = uuidv4();
+        await tx.insert(users).values({
+          id: ownerId,
+          phone: phoneNumber,
+          role: UserRole.FRANCHISE_OWNER,
+          franchiseAreaId: franchiseAreaId, // Assign to the franchise area being created
+          createdAt: now,
+          updatedAt: now,
+          isActive: true,
+          hasOnboarded: false,
+        });
+      }
+
+      // Create franchise area
+      const [createdArea] = await tx
         .insert(franchiseAreas)
         .values({
           id: franchiseAreaId,
           name,
           city,
           geoPolygon: JSON.stringify(normalizedPolygon),
+          ownerId: ownerId,
           isCompanyManaged: !phoneNumber,
           createdAt: now,
           updatedAt: now,
         })
         .returning();
 
-      if (phoneNumber) {
-        await tx
-          .insert(users)
-          .values({
-            phone: phoneNumber,
-            id: uuidv4(),
-            role: UserRole.FRANCHISE_OWNER,
-            franchiseAreaId,
-            createdAt: now,
-            updatedAt: now,
-            isActive: true,
-          });
+      return createdArea;
+    });
 
-        // Update the franchise area with owner ID
-        await tx
-          .update(franchiseAreas)
-          .set({ ownerId: uuidv4() })
-          .where(eq(franchiseAreas.id, franchiseAreaId));
+    // Update customers' franchise IDs in a separate operation to avoid transaction timeout
+    // This is done asynchronously to not block the franchise creation
+    setImmediate(async () => {
+      try {
+        await updateCustomersFranchiseIds(createdFranchiseArea);
+      } catch (error) {
+        console.error('Error updating customers franchise IDs:', error);
       }
-
-      // Update customers' franchise IDs based on location
-      await updateCustomersFranchiseIds(createdFranchiseArea);
-
-      return createdFranchiseArea;
     });
 
     // Return the created franchise area
@@ -207,37 +218,61 @@ export async function updateCustomersFranchiseIds(franchise: franchiseArea) {
   try {
     const db = getFastifyInstance().db;
 
-    // Get all customers without franchise area or with location
-    const allCustomers = await db.query.users.findMany({
-      where: eq(users.role, UserRole.CUSTOMER),
+    // Get all customers with location data but no franchise area assigned
+    const customersToCheck = await db.query.users.findMany({
+      where: and(
+        eq(users.role, UserRole.CUSTOMER),
+        // Only check users with location data
+        sql`${users.locationLatitude} IS NOT NULL AND ${users.locationLongitude} IS NOT NULL`
+      ),
     });
 
-    const polygon = JSON.parse(franchise.geoPolygon);
+    if (customersToCheck.length === 0) {
+      return;
+    }
+
+    let polygon;
+    try {
+      polygon = JSON.parse(franchise.geoPolygon);
+    } catch (e) {
+      console.error('Error parsing franchise polygon:', e);
+      return;
+    }
     
-    const matchingUserIds = allCustomers
-      .filter((user: User) => {
-        if (!user.locationLatitude || !user.locationLongitude) {
-          return false;
-        }
-        
-        return isPointInPolygon(
+    const matchingUserIds: string[] = [];
+    
+    for (const user of customersToCheck) {
+      if (user.locationLatitude && user.locationLongitude) {
+        const isInside = isPointInPolygon(
           {
             latitude: user.locationLatitude,
             longitude: user.locationLongitude,
           },
           polygon
         );
-      })
-      .map((user: User) => user.id);
+        
+        if (isInside) {
+          matchingUserIds.push(user.id);
+        }
+      }
+    }
 
+    // Update users in batches to avoid large transactions
     if (matchingUserIds.length > 0) {
-      await db
-        .update(users)
-        .set({ 
-          franchiseAreaId: franchise.id,
-          updatedAt: new Date().toISOString()
-        })
-        .where(inArray(users.id, matchingUserIds));
+      const batchSize = 50;
+      for (let i = 0; i < matchingUserIds.length; i += batchSize) {
+        const batch = matchingUserIds.slice(i, i + batchSize);
+        
+        await db
+          .update(users)
+          .set({ 
+            franchiseAreaId: franchise.id,
+            updatedAt: new Date().toISOString()
+          })
+          .where(inArray(users.id, batch));
+      }
+      
+      console.log(`Updated ${matchingUserIds.length} customers with franchise area ${franchise.id}`);
     }
   } catch (e) {
     console.error('Error updating franchise IDs:', e);
@@ -318,14 +353,20 @@ export async function updateFranchiseArea(id: string, data: any) {
   
   await fastify.db.update(franchiseAreas).set(updateData).where(eq(franchiseAreas.id, id));
   
-  // If polygon was updated, reassign customers
+  // If polygon was updated, reassign customers asynchronously
   if (data.geoPolygon) {
-    const updatedArea = await fastify.db.query.franchiseAreas.findFirst({
-      where: eq(franchiseAreas.id, id)
+    setImmediate(async () => {
+      try {
+        const updatedArea = await fastify.db.query.franchiseAreas.findFirst({
+          where: eq(franchiseAreas.id, id)
+        });
+        if (updatedArea) {
+          await updateCustomersFranchiseIds(updatedArea);
+        }
+      } catch (error) {
+        console.error('Error updating customers after franchise area update:', error);
+      }
     });
-    if (updatedArea) {
-      await updateCustomersFranchiseIds(updatedArea);
-    }
   }
   
   return await getFranchiseAreaById(id);
@@ -346,7 +387,11 @@ export async function assignFranchiseOwner(id: string, ownerId: string) {
   
   // Set user role if not already franchise owner
   if (owner.role !== UserRole.FRANCHISE_OWNER) {
-    await fastify.db.update(users).set({ role: UserRole.FRANCHISE_OWNER }).where(eq(users.id, ownerId));
+    await fastify.db.update(users).set({ 
+      role: UserRole.FRANCHISE_OWNER,
+      franchiseAreaId: id,
+      updatedAt: new Date().toISOString()
+    }).where(eq(users.id, ownerId));
   }
   
   await fastify.db.update(franchiseAreas).set({ 
