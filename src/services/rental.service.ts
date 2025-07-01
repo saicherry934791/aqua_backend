@@ -68,7 +68,14 @@ export async function getAllRentals(status?: RentalStatus, user?: User) {
     }
   }
   
-  return results;
+  // Process results to ensure proper data structure
+  return results.map(rental => ({
+    ...rental,
+    product: rental.product ? {
+      ...rental.product,
+      images: parseJsonSafe<string[]>(rental.product.images as any, [])
+    } : null
+  }));
 }
 
 // Get rentals for a specific user
@@ -89,7 +96,14 @@ export async function getUserRentals(userId: string, status?: RentalStatus) {
     },
   });
   
-  return results;
+  // Process results to ensure proper data structure
+  return results.map(rental => ({
+    ...rental,
+    product: rental.product ? {
+      ...rental.product,
+      images: parseJsonSafe<string[]>(rental.product.images as any, [])
+    } : null
+  }));
 }
 
 // Get rental by ID
