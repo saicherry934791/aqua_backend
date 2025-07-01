@@ -7,9 +7,16 @@ import { ProductSchema } from './product.schema';
 // User Schema (simplified for order relationships)
 export const UserInOrderSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().nullable().optional(),
   phone: z.string(),
-  email: z.string().optional().nullable(),
+  email: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  alternativePhone: z.string().nullable().optional(),
+  role: z.string(),
+  franchiseAreaId: z.string().nullable().optional(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 // Payment Schema
@@ -38,9 +45,9 @@ export const OrderSchema = z.object({
   installationDate: z.string().optional().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  customer: UserInOrderSchema.optional(),
+  customer: UserInOrderSchema.optional().nullable(),
   serviceAgent: UserInOrderSchema.optional().nullable(),
-  product: ProductSchema.optional(),
+  product: ProductSchema.optional().nullable(),
   payments: z.array(PaymentSchema).optional(),
 });
 

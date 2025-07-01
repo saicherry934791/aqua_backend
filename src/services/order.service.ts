@@ -77,13 +77,24 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
       },
     });
   }
-  results.forEach((order) => {
-    if (order.product) {
-      order.product.images = parseJsonSafe<string[]>(order.product.images as any, []);
-    }
+
+  // Process results to ensure proper data structure
+  const processedResults = results.map((order) => {
+    const processedOrder = {
+      ...order,
+      customer: order.customer || null,
+      serviceAgent: order.serviceAgent || null,
+      product: order.product ? {
+        ...order.product,
+        images: parseJsonSafe<string[]>(order.product.images as any, [])
+      } : null,
+      payments: order.payments || []
+    };
+
+    return processedOrder;
   });
 
-  return results;
+  return processedResults;
 }
 
 // Get orders for a specific user
