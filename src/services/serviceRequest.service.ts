@@ -5,10 +5,11 @@ import * as notificationService from './notification.service';
 import { ServiceRequestStatus, ServiceRequestType, UserRole, NotificationType, NotificationChannel } from '../types';
 import { generateId } from '../utils/helpers';
 import { notFound, badRequest, forbidden } from '../utils/errors';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 // Get all service requests (with optional filters)
 export async function getAllServiceRequests(filters: any, user: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   let whereClause: any = [];
 
   // Role-based filtering
@@ -45,7 +46,7 @@ export async function getAllServiceRequests(filters: any, user: any) {
 
 // Get service request by ID
 export async function getServiceRequestById(id: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const result = await fastify.db.query.serviceRequests.findFirst({
     where: eq(serviceRequests.id, id),
     with: {
@@ -59,7 +60,7 @@ export async function getServiceRequestById(id: string) {
 
 // Create a new service request
 export async function createServiceRequest(data: any, user: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const id = generateId('srq');
   const now = new Date().toISOString();
 
@@ -111,7 +112,7 @@ export async function createServiceRequest(data: any, user: any) {
 
 // Update service request status
 export async function updateServiceRequestStatus(id: string, status: ServiceRequestStatus, user: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const sr = await getServiceRequestById(id);
   if (!sr) throw notFound('Service Request');
 
@@ -148,7 +149,7 @@ export async function updateServiceRequestStatus(id: string, status: ServiceRequ
 
 // Assign service agent
 export async function assignServiceAgent(id: string, assignedToId: string, user: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const sr = await getServiceRequestById(id);
   if (!sr) throw notFound('Service Request');
 

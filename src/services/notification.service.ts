@@ -4,6 +4,7 @@ import { notifications, users } from '../models/schema';
 import { NotificationType, NotificationChannel, NotificationStatus } from '../types';
 import { generateId } from '../utils/helpers';
 import { notFound } from '../utils/errors';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 /**
  * Send a notification to a user
@@ -27,7 +28,7 @@ export async function sendNotification(
   referenceType?: string,
   scheduledAt?: Date
 ): Promise<string> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   // Check if user exists
   const user = await fastify.db.query.users.findFirst({
@@ -93,7 +94,7 @@ export async function sendNotification(
  * @returns Updated notification
  */
 export async function markNotificationAsRead(notificationId: string, userId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const notification = await fastify.db.query.notifications.findFirst({
     where: and(
@@ -127,7 +128,7 @@ export async function markNotificationAsRead(notificationId: string, userId: str
  * @returns Array of notifications
  */
 export async function getUserNotifications(userId: string, limit = 20, offset = 0) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const results = await fastify.db.query.notifications.findMany({
     where: eq(fastify.db.query.notifications.userId, userId),
@@ -148,7 +149,7 @@ export async function getUserNotifications(userId: string, limit = 20, offset = 
  * @returns Number of unread notifications
  */
 export async function getUnreadNotificationCount(userId: string): Promise<number> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const results = await fastify.db
     .select({ count: sql`count(*)` })
@@ -168,7 +169,7 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
  * This function would be called by a scheduler periodically
  */
 export async function processPendingNotifications() {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   // Call the notification plugin's processPendingNotifications method
   await fastify.notification.processPendingNotifications();
@@ -185,7 +186,7 @@ export async function send(
   referenceType?: string,
   scheduledAt?: string
 ) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const id = generateId('ntf');
   const now = new Date().toISOString();
   const notification = {
@@ -223,7 +224,7 @@ export async function send(
 
 // Get all notifications for a user
 export async function getAll(userId: string, filters: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   let whereClause: any = [eq(notifications.userId, userId)];
   if (filters.status) {
     whereClause.push(eq(notifications.status, filters.status));
@@ -247,7 +248,7 @@ export async function getAll(userId: string, filters: any) {
 
 // Get notification by ID
 export async function getNotificationById(id: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const result = await fastify.db.query.notifications.findFirst({
     where: eq(notifications.id, id),
     with: {
@@ -259,7 +260,7 @@ export async function getNotificationById(id: string) {
 
 // Mark notification as read
 export async function markAsRead(id: string, userId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const notification = await getNotificationById(id);
   if (!notification) throw notFound('Notification');
   if (notification.userId !== userId) throw notFound('Notification');

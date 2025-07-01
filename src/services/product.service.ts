@@ -156,7 +156,7 @@ export async function updateProduct(id: string, data: {
 
 // Get product features
 export async function getProductFeatures(productId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
 
   const results = await fastify.db.query.productFeatures.findMany({
     where: eq(fastify.db.query.productFeatures.productId, productId)
@@ -167,7 +167,7 @@ export async function getProductFeatures(productId: string) {
 
 // Add product feature
 export async function addProductFeature(productId: string, data: { name: string; value: string; }) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
 
   const product = await getProductById(productId);
   if (!product) {
@@ -198,7 +198,7 @@ export async function updateProductFeature(
   featureId: string,
   data: { name?: string; value?: string; }
 ) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
 
   const feature = await fastify.db.query.productFeatures.findFirst({
     where: and(
@@ -230,7 +230,7 @@ export async function updateProductFeature(
 
 // Delete product feature
 export async function deleteProductFeature(productId: string, featureId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
 
   const feature = await fastify.db.query.productFeatures.findFirst({
     where: and(

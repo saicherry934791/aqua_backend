@@ -2,9 +2,10 @@ import { FastifyInstance } from 'fastify';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
 import { users, franchiseAreas, products, orders, rentals, serviceRequests, payments } from '../models/schema';
 import { UserRole, RentalStatus, OrderType, OrderStatus, PaymentStatus, PaymentType, ServiceRequestStatus } from '../types';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 export async function getAdminDashboardStats(from?: string, to?: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   const dateFilter = (col: any) => {
     if (from && to) return and(gte(col, from), lte(col, to));
     if (from) return gte(col, from);

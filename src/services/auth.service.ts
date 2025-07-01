@@ -44,7 +44,7 @@ export async function verifyOtp(
   authData?: LoginResponse;
 }> {
   // Implementation would depend on the Firebase plugin
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
 
   if (!fastify.firebase) {
     throw new Error('Firebase not initialized');

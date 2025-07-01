@@ -8,7 +8,7 @@ import * as franchiseService from './franchise.service';
 import { getFastifyInstance } from '../shared/fastify-instance';
 
 export async function createUser(userData: RegisterUserRequest & { firebaseUid?: string }): Promise<User> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   // Check if user already exists
   const existingUser = await getUserByPhone(userData.phone);
@@ -124,7 +124,7 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 export async function getUserByPhone(phone: string): Promise<User | null> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const result = await fastify.db.query.users.findFirst({
     where: eq(fastify.db.query.users.phone, phone),
@@ -143,7 +143,7 @@ export async function getUserByPhone(phone: string): Promise<User | null> {
 }
 
 export async function updateUserRole(userId: string, role: UserRole): Promise<User> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const user = await getUserById(userId);
   if (!user) {
@@ -167,7 +167,7 @@ export async function updateUserRole(userId: string, role: UserRole): Promise<Us
 }
 
 export async function updateFirebaseUid(userId: string, firebaseUid: string): Promise<User> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const user = await getUserById(userId);
   if (!user) {
@@ -191,7 +191,7 @@ export async function updateFirebaseUid(userId: string, firebaseUid: string): Pr
 }
 
 export async function updateUserLocation(userId: string, location: GeoLocation): Promise<User> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const user = await getUserById(userId);
   if (!user) {
@@ -220,7 +220,7 @@ export async function updateUserLocation(userId: string, location: GeoLocation):
 }
 
 export async function getServiceAgentsByFranchiseArea(franchiseAreaId: string): Promise<User[]> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   
   const results = await fastify.db.query.users.findMany({
     where: (user) => {
@@ -244,7 +244,7 @@ export async function findFranchiseAreaForUser(location: GeoLocation): Promise<s
 
 // Get all users (with optional filters)
 export async function getAllUsers(filters: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   let whereClause: any = [];
   if (filters.role) {
     whereClause.push(eq(users.role, filters.role));
@@ -263,7 +263,7 @@ export async function getAllUsers(filters: any) {
 
 // Update user profile
 export async function updateUserProfile(id: string, data: any, currentUser: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   // Only the user themselves or admin can update
   if (currentUser.userId !== id && currentUser.role !== UserRole.ADMIN) {
     throw forbidden('You do not have permission to update this user');
@@ -285,7 +285,7 @@ export async function updateUserProfile(id: string, data: any, currentUser: any)
 
 // Change user role (admin only)
 export async function changeUserRole(id: string, role: string, currentUser: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   if (currentUser.role !== UserRole.ADMIN) {
     throw forbidden('Only admin can change user roles');
   }
@@ -297,7 +297,7 @@ export async function changeUserRole(id: string, role: string, currentUser: any)
 
 // Set user active status (admin only)
 export async function setUserActive(id: string, isActive: boolean, currentUser: any) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance()
   if (currentUser.role !== UserRole.ADMIN) {
     throw forbidden('Only admin can change user active status');
   }
