@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and, or, inArray, isNull } from 'drizzle-orm';
+import { eq, and, or, inArray, isNull, notInArray } from 'drizzle-orm';
 import { orders, payments, users, products, rentals, franchiseAreas } from '../models/schema';
 import * as userService from './user.service';
 import * as franchiseService from './franchise.service';
@@ -140,13 +140,28 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
   return processedResults;
 }
 
-// Get orders for a specific user
+// Get orders for a specific user - Updated to show meaningful orders
 export async function getUserOrders(userId: string, status?: OrderStatus, type?: OrderType) {
   const fastify = getFastifyInstance();
 
+  // Define meaningful order statuses for users (payment completed and above)
+  const meaningfulStatuses = [
+    OrderStatus.PAYMENT_COMPLETED,
+    OrderStatus.ASSIGNED,
+    OrderStatus.INSTALLATION_PENDING,
+    OrderStatus.INSTALLED,
+    OrderStatus.COMPLETED
+  ];
+
   let conditions = eq(orders.customerId, userId);
 
-  if (status) {
+  // If no specific status is requested, filter to meaningful statuses
+  if (!status) {
+    conditions = and(
+      conditions,
+      inArray(orders.status, meaningfulStatuses)
+    );
+  } else {
     conditions = and(conditions, eq(orders.status, status));
   }
 
@@ -161,15 +176,49 @@ export async function getUserOrders(userId: string, status?: OrderStatus, type?:
       serviceAgent: true,
       payments: true,
     },
+    orderBy: (orders, { desc }) => [desc(orders.createdAt)] // Show newest first
   });
 
-  results.forEach((order) => {
-    if (order.product) {
-      order.product.images = parseJsonSafe<string[]>(order.product.images as any, []);
-    }
+  // Process results to ensure proper data structure
+  const processedResults = results.map((order) => {
+    return {
+      id: order.id,
+      customerId: order.customerId,
+      productId: order.productId,
+      type: order.type,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      paymentStatus: order.paymentStatus,
+      serviceAgentId: order.serviceAgentId || null,
+      installationDate: order.installationDate || null,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      serviceAgent: order.serviceAgent ? {
+        id: order.serviceAgent.id,
+        name: order.serviceAgent.name || null,
+        phone: order.serviceAgent.phone,
+        email: order.serviceAgent.email || null,
+        address: order.serviceAgent.address || null,
+        alternativePhone: order.serviceAgent.alternativePhone || null,
+        role: order.serviceAgent.role,
+        franchiseAreaId: order.serviceAgent.franchiseAreaId || null,
+        locationLatitude: order.serviceAgent.locationLatitude || null,
+        locationLongitude: order.serviceAgent.locationLongitude || null,
+        hasOnboarded: order.serviceAgent.hasOnboarded || false,
+        isActive: order.serviceAgent.isActive,
+        firebaseUid: order.serviceAgent.firebaseUid || null,
+        createdAt: order.serviceAgent.createdAt,
+        updatedAt: order.serviceAgent.updatedAt,
+      } : null,
+      product: order.product ? {
+        ...order.product,
+        images: parseJsonSafe<string[]>(order.product.images as any, [])
+      } : null,
+      payments: order.payments || []
+    };
   });
 
-  return results;
+  return processedResults;
 }
 
 // Get order by ID
