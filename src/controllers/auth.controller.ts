@@ -150,11 +150,17 @@ export async function me(
   reply: FastifyReply
 ) {
   try {
-    return reply.code(200).send({ user: request.user });
+    // Get the full user object from database using the userId from JWT
+    const user = await userService.getUserById(request.user.userId);
+
+    if (!user) {
+      throw notFound('User');
+    }
+
+    return reply.code(200).send({ user });
   } catch (error) {
     handleError(error, request, reply);
   }
-
 }
 
 export async function checkRole(
