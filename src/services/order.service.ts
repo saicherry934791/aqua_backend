@@ -78,12 +78,55 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
     });
   }
 
-  // Process results to ensure proper data structure
+  // Process results to ensure proper data structure and handle nulls
   const processedResults = results.map((order) => {
+    // Ensure all fields are properly structured
     const processedOrder = {
-      ...order,
-      customer: order.customer || null,
-      serviceAgent: order.serviceAgent || null,
+      id: order.id,
+      customerId: order.customerId,
+      productId: order.productId,
+      type: order.type,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      paymentStatus: order.paymentStatus,
+      serviceAgentId: order.serviceAgentId || null,
+      installationDate: order.installationDate || null,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      customer: order.customer ? {
+        id: order.customer.id,
+        name: order.customer.name || null,
+        phone: order.customer.phone,
+        email: order.customer.email || null,
+        address: order.customer.address || null,
+        alternativePhone: order.customer.alternativePhone || null,
+        role: order.customer.role,
+        franchiseAreaId: order.customer.franchiseAreaId || null,
+        locationLatitude: order.customer.locationLatitude || null,
+        locationLongitude: order.customer.locationLongitude || null,
+        hasOnboarded: order.customer.hasOnboarded || false,
+        isActive: order.customer.isActive,
+        firebaseUid: order.customer.firebaseUid || null,
+        createdAt: order.customer.createdAt,
+        updatedAt: order.customer.updatedAt,
+      } : null,
+      serviceAgent: order.serviceAgent ? {
+        id: order.serviceAgent.id,
+        name: order.serviceAgent.name || null,
+        phone: order.serviceAgent.phone,
+        email: order.serviceAgent.email || null,
+        address: order.serviceAgent.address || null,
+        alternativePhone: order.serviceAgent.alternativePhone || null,
+        role: order.serviceAgent.role,
+        franchiseAreaId: order.serviceAgent.franchiseAreaId || null,
+        locationLatitude: order.serviceAgent.locationLatitude || null,
+        locationLongitude: order.serviceAgent.locationLongitude || null,
+        hasOnboarded: order.serviceAgent.hasOnboarded || false,
+        isActive: order.serviceAgent.isActive,
+        firebaseUid: order.serviceAgent.firebaseUid || null,
+        createdAt: order.serviceAgent.createdAt,
+        updatedAt: order.serviceAgent.updatedAt,
+      } : null,
       product: order.product ? {
         ...order.product,
         images: parseJsonSafe<string[]>(order.product.images as any, [])

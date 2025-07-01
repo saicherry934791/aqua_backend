@@ -4,7 +4,7 @@ import { ErrorResponseSchema } from './auth.schema';
 import { OrderStatus, OrderType, PaymentStatus } from '../types';
 import { ProductSchema } from './product.schema';
 
-// User Schema (simplified for order relationships)
+// User Schema (simplified for order relationships) - Updated to match actual DB structure
 export const UserInOrderSchema = z.object({
   id: z.string(),
   name: z.string().nullable().optional(),
@@ -14,7 +14,11 @@ export const UserInOrderSchema = z.object({
   alternativePhone: z.string().nullable().optional(),
   role: z.string(),
   franchiseAreaId: z.string().nullable().optional(),
+  locationLatitude: z.number().nullable().optional(),
+  locationLongitude: z.number().nullable().optional(),
+  hasOnboarded: z.boolean().optional(),
   isActive: z.boolean(),
+  firebaseUid: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -32,7 +36,7 @@ export const PaymentSchema = z.object({
   updatedAt: z.string(),
 });
 
-// Order Schema
+// Order Schema - Updated to handle all possible null/undefined cases
 export const OrderSchema = z.object({
   id: z.string(),
   customerId: z.string(),
@@ -48,7 +52,7 @@ export const OrderSchema = z.object({
   customer: UserInOrderSchema.optional().nullable(),
   serviceAgent: UserInOrderSchema.optional().nullable(),
   product: ProductSchema.optional().nullable(),
-  payments: z.array(PaymentSchema).optional(),
+  payments: z.array(PaymentSchema).optional().default([]),
 });
 
 // Available Service Agent Schema
@@ -221,7 +225,7 @@ export const updateOrderStatusSchema = {
   security: [{ bearerAuth: [] }],
 };
 
-// Assign Service Agent Schema - NEW SCHEMA
+// Assign Service Agent Schema
 export const AssignServiceAgentParamsSchema = z.object({
   id: z.string(),
 });
