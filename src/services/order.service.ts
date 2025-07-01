@@ -175,39 +175,39 @@ export async function createOrder(data: {
   
   // Create the order in a transaction
   const createdOrder = await fastify.db.transaction(async (tx) => {
-    // Update user details if provided
-    if (data.userDetails) {
-      const updateData: any = {
-        updatedAt: new Date().toISOString()
-      };
+  //   // Update user details if provided
+  //   if (data.userDetails) {
+  //     const updateData: any = {
+  //       updatedAt: new Date().toISOString()
+  //     };
       
-      if (data.userDetails.name) updateData.name = data.userDetails.name;
-      if (data.userDetails.email) updateData.email = data.userDetails.email;
-      if (data.userDetails.address) updateData.address = data.userDetails.address;
-      if (data.userDetails.phone) updateData.phone = data.userDetails.phone;
-      if (data.userDetails.alternativePhone) updateData.alternativePhone = data.userDetails.alternativePhone;
+  //     if (data.userDetails.name) updateData.name = data.userDetails.name;
+  //     if (data.userDetails.email) updateData.email = data.userDetails.email;
+  //     if (data.userDetails.address) updateData.address = data.userDetails.address;
+  //     if (data.userDetails.phone) updateData.phone = data.userDetails.phone;
+  //     if (data.userDetails.alternativePhone) updateData.alternativePhone = data.userDetails.alternativePhone;
       
-      // Update location if provided
-      if (data.userDetails.latitude && data.userDetails.longitude) {
-        updateData.locationLatitude = data.userDetails.latitude;
-        updateData.locationLongitude = data.userDetails.longitude;
+  //     // Update location if provided
+  //     if (data.userDetails.latitude && data.userDetails.longitude) {
+  //       updateData.locationLatitude = data.userDetails.latitude;
+  //       updateData.locationLongitude = data.userDetails.longitude;
         
-        // Find and assign franchise area based on new location
-        const franchiseAreaId = await franchiseService.findFranchiseAreaForLocation({
-          latitude: data.userDetails.latitude,
-          longitude: data.userDetails.longitude
-        });
+  //       // Find and assign franchise area based on new location
+  //       const franchiseAreaId = await franchiseService.findFranchiseAreaForLocation({
+  //         latitude: data.userDetails.latitude,
+  //         longitude: data.userDetails.longitude
+  //       });
         
-        if (franchiseAreaId) {
-          updateData.franchiseAreaId = franchiseAreaId;
-        }
-      }
+  //       if (franchiseAreaId) {
+  //         updateData.franchiseAreaId = franchiseAreaId;
+  //       }
+  //     }
       
-      await tx
-        .update(users)
-        .set(updateData)
-        .where(eq(users.id, data.customerId));
-    }
+  //     await tx
+  //       .update(users)
+  //       .set(updateData)
+  //       .where(eq(users.id, data.customerId));
+  //   }
     
     // Get updated customer info for franchise area
     const updatedCustomer = await tx.query.users.findFirst({
