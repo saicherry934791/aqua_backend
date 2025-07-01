@@ -100,12 +100,21 @@ export async function createOrder(
       throw badRequest('This product is not available for rent');
     }
     
+    // Validate installation date if provided
+    let parsedInstallationDate: Date | undefined;
+    if (installationDate) {
+      parsedInstallationDate = new Date(installationDate);
+      if (parsedInstallationDate <= new Date()) {
+        throw badRequest('Installation date must be in the future');
+      }
+    }
+    
     // Create the order
     const order = await orderService.createOrder({
       productId,
       customerId,
       type,
-      installationDate: installationDate ? new Date(installationDate) : undefined
+      installationDate: parsedInstallationDate
     });
     
     return reply.code(201).send({ 
@@ -190,9 +199,14 @@ export async function updateInstallationDate(
       throw forbidden('You are not authorized to update installation date');
     }
     
+    const parsedDate = new Date(installationDate);
+    if (parsedDate <= new Date()) {
+      throw badRequest('Installation date must be in the future');
+    }
+    
     const order = await orderService.updateInstallationDate(
       id, 
-      new Date(installationDate),
+      parsedDate,
       request.user
     );
     
@@ -225,7 +239,7 @@ export async function cancelOrder(
         [OrderStatus.CREATED, OrderStatus.PAYMENT_PENDING].includes(order.status));
     
     if (!hasPermission) {
-      throw forbidden('You do not have permission to cancel this order');
+      throw forbidden('You do not have permission to cancel this order or the order cannot be cancelled in its current state');
     }
     
     const updatedOrder = await orderService.updateOrderStatus(id, OrderStatus.CANCELLED, request.user);
@@ -249,7 +263,6 @@ export async function initiatePayment(
 ) {
   try {
     const { id } = request.params;
-    const { paymentType } = request.body;
     
     const order = await orderService.getOrderById(id);
     if (!order) {
@@ -268,7 +281,7 @@ export async function initiatePayment(
     const paymentInfo = await orderService.initiatePayment(id);
     
     return reply.code(200).send({ 
-      message: 'Payment initiated',
+      message: 'Payment initiated successfully',
       paymentInfo
     });
   } catch (error) {

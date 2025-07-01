@@ -4,23 +4,16 @@ import { orders, payments, users, products, rentals, franchiseAreas } from '../m
 import * as userService from './user.service';
 import * as franchiseService from './franchise.service';
 import * as notificationService from './notification.service';
-import { OrderType, OrderStatus, PaymentStatus, PaymentType, User, NotificationType, NotificationChannel, UserRole } from '../types';
+import { OrderType, OrderStatus, PaymentStatus, PaymentType, User, NotificationType, NotificationChannel, UserRole, RentalStatus } from '../types';
 import { generateId } from '../utils/helpers';
 import { notFound, badRequest, serverError } from '../utils/errors';
 import crypto from 'crypto';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 // Get all orders
 export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?: User) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
-  let query = fastify.db.query.orders.findMany({
-    with: {
-      customer: true,
-      product: true,
-      serviceAgent: true,
-    }
-  });
-
   let results;
   
   // Apply filters based on user role and parameters
@@ -36,24 +29,27 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
     
     const customerIds = customersInArea.map(customer => customer.id);
     
+    if (customerIds.length === 0) {
+      return [];
+    }
+    
+    let whereConditions = inArray(orders.customerId, customerIds);
+    
+    if (status) {
+      whereConditions = and(whereConditions, eq(orders.status, status));
+    }
+    
+    if (type) {
+      whereConditions = and(whereConditions, eq(orders.type, type));
+    }
+    
     results = await fastify.db.query.orders.findMany({
-      where: (orders) => {
-        let conditions = inArray(orders.customerId, customerIds);
-        
-        if (status) {
-          conditions = and(conditions, eq(orders.status, status));
-        }
-        
-        if (type) {
-          conditions = and(conditions, eq(orders.type, type));
-        }
-        
-        return conditions;
-      },
+      where: whereConditions,
       with: {
         customer: true,
         product: true,
         serviceAgent: true,
+        payments: true,
       },
     });
   } else {
@@ -61,32 +57,25 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
     let conditions = undefined;
     
     if (status) {
-      conditions = eq(fastify.db.query.orders.status, status);
+      conditions = eq(orders.status, status);
     }
     
     if (type) {
       conditions = conditions 
-        ? and(conditions, eq(fastify.db.query.orders.type, type)) 
-        : eq(fastify.db.query.orders.type, type);
+        ? and(conditions, eq(orders.type, type)) 
+        : eq(orders.type, type);
     }
     
     // Apply the filters
-    results = conditions 
-      ? await fastify.db.query.orders.findMany({
-          where: conditions,
-          with: {
-            customer: true,
-            product: true,
-            serviceAgent: true,
-          },
-        }) 
-      : await fastify.db.query.orders.findMany({
-          with: {
-            customer: true,
-            product: true,
-            serviceAgent: true,
-          },
-        });
+    results = await fastify.db.query.orders.findMany({
+      where: conditions,
+      with: {
+        customer: true,
+        product: true,
+        serviceAgent: true,
+        payments: true,
+      },
+    });
   }
   
   return results;
@@ -94,16 +83,16 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
 
 // Get orders for a specific user
 export async function getUserOrders(userId: string, status?: OrderStatus, type?: OrderType) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
-  let conditions = eq(fastify.db.query.orders.customerId, userId);
+  let conditions = eq(orders.customerId, userId);
   
   if (status) {
-    conditions = and(conditions, eq(fastify.db.query.orders.status, status));
+    conditions = and(conditions, eq(orders.status, status));
   }
   
   if (type) {
-    conditions = and(conditions, eq(fastify.db.query.orders.type, type));
+    conditions = and(conditions, eq(orders.type, type));
   }
   
   const results = await fastify.db.query.orders.findMany({
@@ -111,6 +100,7 @@ export async function getUserOrders(userId: string, status?: OrderStatus, type?:
     with: {
       product: true,
       serviceAgent: true,
+      payments: true,
     },
   });
   
@@ -119,10 +109,10 @@ export async function getUserOrders(userId: string, status?: OrderStatus, type?:
 
 // Get order by ID
 export async function getOrderById(id: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const result = await fastify.db.query.orders.findFirst({
-    where: eq(fastify.db.query.orders.id, id),
+    where: eq(orders.id, id),
     with: {
       customer: true,
       product: true,
@@ -141,15 +131,24 @@ export async function createOrder(data: {
   type: OrderType;
   installationDate?: Date;
 }) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   // Get product info to calculate total amount
   const product = await fastify.db.query.products.findFirst({
-    where: eq(fastify.db.query.products.id, data.productId),
+    where: eq(products.id, data.productId),
   });
   
   if (!product) {
     throw notFound('Product');
+  }
+  
+  // Validate product availability for the order type
+  if (data.type === OrderType.PURCHASE && !product.isPurchasable) {
+    throw badRequest('This product is not available for purchase');
+  }
+  
+  if (data.type === OrderType.RENTAL && !product.isRentable) {
+    throw badRequest('This product is not available for rental');
   }
   
   // Get customer info to determine franchise area
@@ -162,36 +161,75 @@ export async function createOrder(data: {
   let franchiseAreaId = customer.franchiseAreaId;
   if (!franchiseAreaId && customer.location) {
     franchiseAreaId = await franchiseService.findFranchiseAreaForLocation(customer.location);
+    
+    // Update customer's franchise area if found
+    if (franchiseAreaId) {
+      await fastify.db
+        .update(users)
+        .set({ franchiseAreaId, updatedAt: new Date().toISOString() })
+        .where(eq(users.id, data.customerId));
+    }
   }
   
   if (!franchiseAreaId) {
-    throw badRequest('No franchise area available for this location');
+    throw badRequest('No franchise area available for this location. Please contact support.');
   }
   
-  const orderId = generateId('ord');
+  const orderId = await generateId('ord');
   
   // Calculate total amount based on order type
   const totalAmount = data.type === OrderType.PURCHASE 
     ? product.buyPrice 
     : product.deposit; // For rentals, initial payment is the deposit amount
   
-  // Create the order
-  await fastify.db.insert(orders).values({
-    id: orderId,
-    customerId: data.customerId,
-    productId: data.productId,
-    type: data.type,
-    status: OrderStatus.CREATED,
-    totalAmount,
-    paymentStatus: PaymentStatus.PENDING,
-    installationDate: data.installationDate?.toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  // Create the order in a transaction
+  const createdOrder = await fastify.db.transaction(async (tx) => {
+    // Create the order
+    await tx.insert(orders).values({
+      id: orderId,
+      customerId: data.customerId,
+      productId: data.productId,
+      type: data.type,
+      status: OrderStatus.CREATED,
+      totalAmount,
+      paymentStatus: PaymentStatus.PENDING,
+      installationDate: data.installationDate?.toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    
+    // Create payment record
+    const paymentId = await generateId('pay');
+    if (data.type === OrderType.RENTAL) {
+      // For rentals, create deposit payment record
+      await tx.insert(payments).values({
+        id: paymentId,
+        orderId,
+        amount: product.deposit,
+        type: PaymentType.DEPOSIT,
+        status: PaymentStatus.PENDING,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      // For purchases, create purchase payment record
+      await tx.insert(payments).values({
+        id: paymentId,
+        orderId,
+        amount: product.buyPrice,
+        type: PaymentType.PURCHASE,
+        status: PaymentStatus.PENDING,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    
+    return orderId;
   });
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       data.customerId,
       'New Order Created',
       `Your order for ${product.name} has been created. Please proceed to payment.`,
@@ -204,39 +242,12 @@ export async function createOrder(data: {
     fastify.log.error(`Failed to send notification: ${error}`);
   }
   
-  const createdOrder = await getOrderById(orderId);
-  
-  // Create payment record
-  if (data.type === OrderType.RENTAL) {
-    // For rentals, create deposit payment record
-    await fastify.db.insert(payments).values({
-      id: generateId('pay'),
-      orderId,
-      amount: product.deposit,
-      type: PaymentType.DEPOSIT,
-      status: PaymentStatus.PENDING,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  } else {
-    // For purchases, create purchase payment record
-    await fastify.db.insert(payments).values({
-      id: generateId('pay'),
-      orderId,
-      amount: product.buyPrice,
-      type: PaymentType.PURCHASE,
-      status: PaymentStatus.PENDING,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  
-  return createdOrder;
+  return await getOrderById(orderId);
 }
 
 // Update order status
 export async function updateOrderStatus(id: string, status: OrderStatus, user: { userId: string; role: UserRole; franchiseAreaId?: string }) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(id);
   if (!order) {
@@ -256,6 +267,11 @@ export async function updateOrderStatus(id: string, status: OrderStatus, user: {
     }
   }
   
+  // Validate status transitions
+  if (!isValidStatusTransition(order.status, status)) {
+    throw badRequest(`Cannot change order status from ${order.status} to ${status}`);
+  }
+  
   // Update the order status
   await fastify.db
     .update(orders)
@@ -267,7 +283,7 @@ export async function updateOrderStatus(id: string, status: OrderStatus, user: {
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       order.customerId,
       'Order Status Updated',
       `Your order status has been updated to ${status}.`,
@@ -288,13 +304,34 @@ export async function updateOrderStatus(id: string, status: OrderStatus, user: {
   return getOrderById(id);
 }
 
+// Validate status transitions
+function isValidStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): boolean {
+  const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+    [OrderStatus.CREATED]: [OrderStatus.PAYMENT_PENDING, OrderStatus.CANCELLED],
+    [OrderStatus.PAYMENT_PENDING]: [OrderStatus.PAYMENT_COMPLETED, OrderStatus.CANCELLED],
+    [OrderStatus.PAYMENT_COMPLETED]: [OrderStatus.ASSIGNED, OrderStatus.INSTALLATION_PENDING],
+    [OrderStatus.ASSIGNED]: [OrderStatus.INSTALLATION_PENDING, OrderStatus.INSTALLED],
+    [OrderStatus.INSTALLATION_PENDING]: [OrderStatus.INSTALLED, OrderStatus.ASSIGNED],
+    [OrderStatus.INSTALLED]: [OrderStatus.COMPLETED],
+    [OrderStatus.CANCELLED]: [], // Cannot transition from cancelled
+    [OrderStatus.COMPLETED]: [], // Cannot transition from completed
+  };
+  
+  return validTransitions[currentStatus]?.includes(newStatus) || false;
+}
+
 // Assign service agent to order
 export async function assignServiceAgent(id: string, serviceAgentId: string, user: { userId: string; role: UserRole; franchiseAreaId?: string }) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(id);
   if (!order) {
     throw notFound('Order');
+  }
+  
+  // Only allow assignment if payment is completed
+  if (order.paymentStatus !== PaymentStatus.COMPLETED) {
+    throw badRequest('Cannot assign service agent until payment is completed');
   }
   
   // Validate that service agent exists and is active
@@ -329,10 +366,10 @@ export async function assignServiceAgent(id: string, serviceAgentId: string, use
   // Send notifications
   try {
     // Notify customer
-    await fastify.notification.send(
+    await notificationService.send(
       order.customerId,
       'Service Agent Assigned',
-      `A service agent has been assigned to your order.`,
+      `A service agent has been assigned to your order. They will contact you soon for installation.`,
       NotificationType.ASSIGNMENT_NOTIFICATION,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       id,
@@ -340,10 +377,10 @@ export async function assignServiceAgent(id: string, serviceAgentId: string, use
     );
     
     // Notify service agent
-    await fastify.notification.send(
+    await notificationService.send(
       serviceAgentId,
       'New Order Assignment',
-      `You have been assigned to a new order.`,
+      `You have been assigned to a new ${order.type} order for ${order.product?.name}.`,
       NotificationType.ASSIGNMENT_NOTIFICATION,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       id,
@@ -358,7 +395,7 @@ export async function assignServiceAgent(id: string, serviceAgentId: string, use
 
 // Update installation date
 export async function updateInstallationDate(id: string, installationDate: Date, user: { userId: string; role: UserRole; franchiseAreaId?: string }) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(id);
   if (!order) {
@@ -378,21 +415,27 @@ export async function updateInstallationDate(id: string, installationDate: Date,
     }
   }
   
+  // Validate installation date is in the future
+  if (installationDate <= new Date()) {
+    throw badRequest('Installation date must be in the future');
+  }
+  
   // Update the order
   await fastify.db
     .update(orders)
     .set({ 
       installationDate: installationDate.toISOString(), 
+      status: OrderStatus.INSTALLATION_PENDING,
       updatedAt: new Date().toISOString() 
     })
     .where(eq(orders.id, id));
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       order.customerId,
-      'Installation Date Updated',
-      `Your installation date has been scheduled for ${installationDate.toLocaleDateString()}.`,
+      'Installation Date Scheduled',
+      `Your installation has been scheduled for ${installationDate.toLocaleDateString()}.`,
       NotificationType.STATUS_UPDATE,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       id,
@@ -407,7 +450,7 @@ export async function updateInstallationDate(id: string, installationDate: Date,
 
 // Initiate payment for an order
 export async function initiatePayment(orderId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(orderId);
   if (!order) {
@@ -419,15 +462,33 @@ export async function initiatePayment(orderId: string) {
     throw badRequest('Payment for this order has already been completed');
   }
   
+  // Check if order is in a valid state for payment
+  if (![OrderStatus.CREATED, OrderStatus.PAYMENT_PENDING].includes(order.status)) {
+    throw badRequest('Order is not in a valid state for payment');
+  }
+  
+  // Get the pending payment record
+  const pendingPayment = await fastify.db.query.payments.findFirst({
+    where: and(
+      eq(payments.orderId, orderId),
+      eq(payments.status, PaymentStatus.PENDING)
+    )
+  });
+  
+  if (!pendingPayment) {
+    throw notFound('No pending payment found for this order');
+  }
+  
   // Create Razorpay order
   const razorpayOrder = await fastify.razorpay.orders.create({
-    amount: order.totalAmount * 100, // Amount in paise
+    amount: pendingPayment.amount * 100, // Amount in paise
     currency: 'INR',
     receipt: orderId,
     notes: {
       orderType: order.type,
-      productName: order.product.name,
-      customerId: order.customerId
+      productName: order.product?.name || 'Water Purifier',
+      customerId: order.customerId,
+      paymentId: pendingPayment.id
     }
   });
   
@@ -438,10 +499,7 @@ export async function initiatePayment(orderId: string) {
       razorpayOrderId: razorpayOrder.id,
       updatedAt: new Date().toISOString() 
     })
-    .where(and(
-      eq(payments.orderId, orderId),
-      eq(payments.status, PaymentStatus.PENDING)
-    ));
+    .where(eq(payments.id, pendingPayment.id));
   
   // Update order status to payment pending
   await fastify.db
@@ -455,13 +513,14 @@ export async function initiatePayment(orderId: string) {
   // Return payment information for frontend
   return {
     orderId,
+    paymentId: pendingPayment.id,
     razorpayOrderId: razorpayOrder.id,
-    amount: order.totalAmount * 100, // in paise
+    amount: pendingPayment.amount * 100, // in paise
     currency: 'INR',
-    productName: order.product.name,
-    customerName: order.customer.name,
-    customerEmail: order.customer.email,
-    customerPhone: order.customer.phone
+    productName: order.product?.name || 'Water Purifier',
+    customerName: order.customer?.name || '',
+    customerEmail: order.customer?.email || '',
+    customerPhone: order.customer?.phone || ''
   };
 }
 
@@ -472,7 +531,7 @@ export async function verifyPayment(
   razorpayOrderId: string, 
   razorpaySignature: string
 ): Promise<boolean> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(orderId);
   if (!order) {
@@ -482,13 +541,13 @@ export async function verifyPayment(
   // Get the payment record
   const payment = await fastify.db.query.payments.findFirst({
     where: and(
-      eq(fastify.db.query.payments.orderId, orderId),
-      eq(fastify.db.query.payments.razorpayOrderId, razorpayOrderId)
+      eq(payments.orderId, orderId),
+      eq(payments.razorpayOrderId, razorpayOrderId)
     )
   });
   
   if (!payment) {
-    throw notFound('Payment record');
+    throw notFound('Payment record not found');
   }
   
   // Verify the signature
@@ -506,32 +565,35 @@ export async function verifyPayment(
     const isVerified = expectedSignature === razorpaySignature;
     
     if (isVerified) {
-      // Update payment status
-      await fastify.db
-        .update(payments)
-        .set({ 
-          razorpayPaymentId,
-          status: PaymentStatus.COMPLETED,
-          updatedAt: new Date().toISOString() 
-        })
-        .where(eq(payments.id, payment.id));
-      
-      // Update order status
-      await fastify.db
-        .update(orders)
-        .set({ 
-          paymentStatus: PaymentStatus.COMPLETED,
-          status: OrderStatus.PAYMENT_COMPLETED,
-          updatedAt: new Date().toISOString() 
-        })
-        .where(eq(orders.id, orderId));
+      // Update payment status in a transaction
+      await fastify.db.transaction(async (tx) => {
+        // Update payment status
+        await tx
+          .update(payments)
+          .set({ 
+            razorpayPaymentId,
+            status: PaymentStatus.COMPLETED,
+            updatedAt: new Date().toISOString() 
+          })
+          .where(eq(payments.id, payment.id));
+        
+        // Update order status
+        await tx
+          .update(orders)
+          .set({ 
+            paymentStatus: PaymentStatus.COMPLETED,
+            status: OrderStatus.PAYMENT_COMPLETED,
+            updatedAt: new Date().toISOString() 
+          })
+          .where(eq(orders.id, orderId));
+      });
       
       // Send notification to customer
       try {
-        await fastify.notification.send(
+        await notificationService.send(
           order.customerId,
           'Payment Successful',
-          `Your payment for order #${orderId} has been received successfully.`,
+          `Your payment for order #${orderId} has been received successfully. We will assign a service agent soon.`,
           NotificationType.PAYMENT_SUCCESS,
           [NotificationChannel.PUSH, NotificationChannel.EMAIL],
           orderId,
@@ -543,12 +605,21 @@ export async function verifyPayment(
       
       return true;
     } else {
+      // Update payment status to failed
+      await fastify.db
+        .update(payments)
+        .set({ 
+          status: PaymentStatus.FAILED,
+          updatedAt: new Date().toISOString() 
+        })
+        .where(eq(payments.id, payment.id));
+      
       // Send notification about failed payment
       try {
-        await fastify.notification.send(
+        await notificationService.send(
           order.customerId,
           'Payment Failed',
-          `Your payment for order #${orderId} could not be verified.`,
+          `Your payment for order #${orderId} could not be verified. Please try again.`,
           NotificationType.PAYMENT_FAILURE,
           [NotificationChannel.PUSH, NotificationChannel.EMAIL],
           orderId,
@@ -562,13 +633,23 @@ export async function verifyPayment(
     }
   } catch (error) {
     fastify.log.error(`Payment verification error: ${error}`);
+    
+    // Update payment status to failed
+    await fastify.db
+      .update(payments)
+      .set({ 
+        status: PaymentStatus.FAILED,
+        updatedAt: new Date().toISOString() 
+      })
+      .where(eq(payments.id, payment.id));
+    
     return false;
   }
 }
 
 // Create rental record from a completed order
 async function createRentalFromOrder(orderId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const order = await getOrderById(orderId);
   if (!order || order.type !== OrderType.RENTAL) {
@@ -576,7 +657,7 @@ async function createRentalFromOrder(orderId: string) {
   }
   
   const product = await fastify.db.query.products.findFirst({
-    where: eq(fastify.db.query.products.id, order.productId),
+    where: eq(products.id, order.productId),
   });
   
   if (!product) {
@@ -588,12 +669,13 @@ async function createRentalFromOrder(orderId: string) {
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   
   // Create rental record
-  const rentalId = generateId('rent');
+  const rentalId = await generateId('rent');
   await fastify.db.insert(rentals).values({
     id: rentalId,
     orderId: order.id,
     customerId: order.customerId,
     productId: order.productId,
+    status: RentalStatus.ACTIVE,
     startDate: now.toISOString(),
     currentPeriodStartDate: now.toISOString(),
     currentPeriodEndDate: nextMonth.toISOString(),
@@ -605,7 +687,7 @@ async function createRentalFromOrder(orderId: string) {
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       order.customerId,
       'Rental Started',
       `Your rental for ${product.name} has been activated. The first payment period is from ${now.toLocaleDateString()} to ${nextMonth.toLocaleDateString()}.`,

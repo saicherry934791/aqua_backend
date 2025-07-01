@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, lte, gte } from 'drizzle-orm';
 import { rentals, orders, payments, users, products } from '../models/schema';
 import * as userService from './user.service';
 import * as notificationService from './notification.service';
@@ -7,18 +7,12 @@ import { RentalStatus, UserRole, PaymentStatus, PaymentType, User, NotificationT
 import { generateId } from '../utils/helpers';
 import { notFound, badRequest, serverError } from '../utils/errors';
 import crypto from 'crypto';
+import { getFastifyInstance } from '../shared/fastify-instance';
 
 // Get all rentals
 export async function getAllRentals(status?: RentalStatus, user?: User) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
-  let query = fastify.db.query.rentals.findMany({
-    with: {
-      customer: true,
-      product: true
-    }
-  });
-
   let results;
   
   // Apply filters based on user role and parameters
@@ -34,36 +28,41 @@ export async function getAllRentals(status?: RentalStatus, user?: User) {
     
     const customerIds = customersInArea.map(customer => customer.id);
     
+    if (customerIds.length === 0) {
+      return [];
+    }
+    
+    let whereConditions = inArray(rentals.customerId, customerIds);
+    
+    if (status) {
+      whereConditions = and(whereConditions, eq(rentals.status, status));
+    }
+    
     results = await fastify.db.query.rentals.findMany({
-      where: (rentals) => {
-        let conditions = inArray(rentals.customerId, customerIds);
-        
-        if (status) {
-          conditions = and(conditions, eq(rentals.status, status));
-        }
-        
-        return conditions;
-      },
+      where: whereConditions,
       with: {
         customer: true,
-        product: true
+        product: true,
+        order: true,
       },
     });
   } else {
     // Apply status filter if provided
     if (status) {
       results = await fastify.db.query.rentals.findMany({
-        where: eq(fastify.db.query.rentals.status, status),
+        where: eq(rentals.status, status),
         with: {
           customer: true,
-          product: true
+          product: true,
+          order: true,
         }
       });
     } else {
       results = await fastify.db.query.rentals.findMany({
         with: {
           customer: true,
-          product: true
+          product: true,
+          order: true,
         }
       });
     }
@@ -74,18 +73,19 @@ export async function getAllRentals(status?: RentalStatus, user?: User) {
 
 // Get rentals for a specific user
 export async function getUserRentals(userId: string, status?: RentalStatus) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
-  let conditions = eq(fastify.db.query.rentals.customerId, userId);
+  let conditions = eq(rentals.customerId, userId);
   
   if (status) {
-    conditions = and(conditions, eq(fastify.db.query.rentals.status, status));
+    conditions = and(conditions, eq(rentals.status, status));
   }
   
   const results = await fastify.db.query.rentals.findMany({
     where: conditions,
     with: {
-      product: true
+      product: true,
+      order: true,
     },
   });
   
@@ -94,13 +94,14 @@ export async function getUserRentals(userId: string, status?: RentalStatus) {
 
 // Get rental by ID
 export async function getRentalById(id: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const result = await fastify.db.query.rentals.findFirst({
-    where: eq(fastify.db.query.rentals.id, id),
+    where: eq(rentals.id, id),
     with: {
       customer: true,
       product: true,
+      order: true,
     },
   });
 
@@ -109,11 +110,16 @@ export async function getRentalById(id: string) {
 
 // Update rental status
 export async function updateRentalStatus(id: string, status: RentalStatus) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const rental = await getRentalById(id);
   if (!rental) {
     throw notFound('Rental');
+  }
+  
+  // Validate status transition
+  if (!isValidRentalStatusTransition(rental.status, status)) {
+    throw badRequest(`Cannot change rental status from ${rental.status} to ${status}`);
   }
   
   const now = new Date();
@@ -135,6 +141,8 @@ export async function updateRentalStatus(id: string, status: RentalStatus) {
     const newEndDate = new Date(currentEndDate.getTime() + pauseDuration);
     updateData.currentPeriodEndDate = newEndDate.toISOString();
     updateData.pausedAt = null; // Reset the pausedAt
+  } else if (status === RentalStatus.TERMINATED) {
+    updateData.endDate = now.toISOString();
   }
   
   await fastify.db
@@ -146,10 +154,31 @@ export async function updateRentalStatus(id: string, status: RentalStatus) {
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    let notificationTitle = '';
+    let notificationMessage = '';
+    
+    switch (status) {
+      case RentalStatus.PAUSED:
+        notificationTitle = 'Rental Paused';
+        notificationMessage = `Your rental for ${rental.product?.name} has been paused.`;
+        break;
+      case RentalStatus.ACTIVE:
+        notificationTitle = 'Rental Resumed';
+        notificationMessage = `Your rental for ${rental.product?.name} has been resumed.`;
+        break;
+      case RentalStatus.TERMINATED:
+        notificationTitle = 'Rental Terminated';
+        notificationMessage = `Your rental for ${rental.product?.name} has been terminated.`;
+        break;
+      default:
+        notificationTitle = 'Rental Status Updated';
+        notificationMessage = `Your rental status has been updated to ${status}.`;
+    }
+    
+    await notificationService.send(
       rental.customerId,
-      `Rental ${status === RentalStatus.PAUSED ? 'Paused' : 'Resumed'}`,
-      `Your rental for ${rental.product.name} has been ${status === RentalStatus.PAUSED ? 'paused' : 'resumed'}.`,
+      notificationTitle,
+      notificationMessage,
       NotificationType.STATUS_UPDATE,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       id,
@@ -162,13 +191,29 @@ export async function updateRentalStatus(id: string, status: RentalStatus) {
   return updatedRental;
 }
 
+// Validate rental status transitions
+function isValidRentalStatusTransition(currentStatus: RentalStatus, newStatus: RentalStatus): boolean {
+  const validTransitions: Record<RentalStatus, RentalStatus[]> = {
+    [RentalStatus.ACTIVE]: [RentalStatus.PAUSED, RentalStatus.TERMINATED],
+    [RentalStatus.PAUSED]: [RentalStatus.ACTIVE, RentalStatus.TERMINATED],
+    [RentalStatus.TERMINATED]: [], // Cannot transition from terminated
+    [RentalStatus.EXPIRED]: [RentalStatus.TERMINATED], // Can only terminate expired rentals
+  };
+  
+  return validTransitions[currentStatus]?.includes(newStatus) || false;
+}
+
 // Terminate rental
 export async function terminateRental(id: string, terminationReason?: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const rental = await getRentalById(id);
   if (!rental) {
     throw notFound('Rental');
+  }
+  
+  if (![RentalStatus.ACTIVE, RentalStatus.PAUSED].includes(rental.status)) {
+    throw badRequest(`Cannot terminate a rental with status ${rental.status}`);
   }
   
   // Update the rental status
@@ -185,10 +230,10 @@ export async function terminateRental(id: string, terminationReason?: string) {
   
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       rental.customerId,
       'Rental Terminated',
-      `Your rental for ${rental.product.name} has been terminated.${terminationReason ? ` Reason: ${terminationReason}` : ''}`,
+      `Your rental for ${rental.product?.name} has been terminated.${terminationReason ? ` Reason: ${terminationReason}` : ''}`,
       NotificationType.STATUS_UPDATE,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       id,
@@ -198,15 +243,14 @@ export async function terminateRental(id: string, terminationReason?: string) {
     fastify.log.error(`Failed to send notification: ${error}`);
   }
   
-  // Create service request for pickup
-  // This functionality would be implemented in a separate service
+  // TODO: Create service request for pickup/uninstallation
   
   return updatedRental;
 }
 
 // Initiate renewal payment
 export async function initiateRenewalPayment(rentalId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const rental = await getRentalById(rentalId);
   if (!rental) {
@@ -217,8 +261,17 @@ export async function initiateRenewalPayment(rentalId: string) {
     throw badRequest('Only active rentals can be renewed');
   }
   
+  // Check if rental period needs renewal
+  const currentPeriodEndDate = new Date(rental.currentPeriodEndDate);
+  const now = new Date();
+  const daysRemaining = Math.floor((currentPeriodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (daysRemaining > 7) {
+    throw badRequest(`Renewal is only available when 7 or fewer days remain in the current period. ${daysRemaining} days remaining.`);
+  }
+  
   // Create a payment record for the renewal
-  const paymentId = generateId('pay');
+  const paymentId = await generateId('pay');
   
   await fastify.db.insert(payments).values({
     id: paymentId,
@@ -237,8 +290,9 @@ export async function initiateRenewalPayment(rentalId: string) {
     receipt: paymentId,
     notes: {
       rentalId: rental.id,
-      productName: rental.product.name,
-      customerId: rental.customerId
+      productName: rental.product?.name || 'Water Purifier',
+      customerId: rental.customerId,
+      paymentType: 'renewal'
     }
   });
   
@@ -258,7 +312,7 @@ export async function initiateRenewalPayment(rentalId: string) {
     razorpayOrderId: razorpayOrder.id,
     amount: rental.monthlyAmount * 100, // in paise
     currency: 'INR',
-    productName: rental.product.name
+    productName: rental.product?.name || 'Water Purifier'
   };
 }
 
@@ -269,7 +323,7 @@ export async function verifyRenewalPayment(
   razorpayOrderId: string, 
   razorpaySignature: string
 ): Promise<boolean> {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const rental = await getRentalById(rentalId);
   if (!rental) {
@@ -279,13 +333,14 @@ export async function verifyRenewalPayment(
   // Get the payment record
   const payment = await fastify.db.query.payments.findFirst({
     where: and(
-      eq(fastify.db.query.payments.orderId, rental.orderId),
-      eq(fastify.db.query.payments.razorpayOrderId, razorpayOrderId)
+      eq(payments.orderId, rental.orderId),
+      eq(payments.razorpayOrderId, razorpayOrderId),
+      eq(payments.type, PaymentType.RENTAL)
     )
   });
   
   if (!payment) {
-    throw notFound('Payment record');
+    throw notFound('Payment record not found');
   }
   
   // Verify the signature
@@ -303,38 +358,44 @@ export async function verifyRenewalPayment(
     const isVerified = expectedSignature === razorpaySignature;
     
     if (isVerified) {
-      // Update payment status
-      await fastify.db
-        .update(payments)
-        .set({ 
-          razorpayPaymentId,
-          status: PaymentStatus.COMPLETED,
-          updatedAt: new Date().toISOString() 
-        })
-        .where(eq(payments.id, payment.id));
-      
-      // Extend the rental period
-      const currentEndDate = new Date(rental.currentPeriodEndDate);
-      const newStartDate = new Date(currentEndDate);
-      const newEndDate = new Date(currentEndDate);
-      newEndDate.setMonth(newEndDate.getMonth() + 1);
-      
-      // Update the rental
-      await fastify.db
-        .update(rentals)
-        .set({ 
-          currentPeriodStartDate: newStartDate.toISOString(),
-          currentPeriodEndDate: newEndDate.toISOString(),
-          updatedAt: new Date().toISOString() 
-        })
-        .where(eq(rentals.id, rentalId));
+      // Update payment and rental in a transaction
+      await fastify.db.transaction(async (tx) => {
+        // Update payment status
+        await tx
+          .update(payments)
+          .set({ 
+            razorpayPaymentId,
+            status: PaymentStatus.COMPLETED,
+            updatedAt: new Date().toISOString() 
+          })
+          .where(eq(payments.id, payment.id));
+        
+        // Extend the rental period
+        const currentEndDate = new Date(rental.currentPeriodEndDate);
+        const newStartDate = new Date(currentEndDate);
+        const newEndDate = new Date(currentEndDate);
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
+        
+        // Update the rental
+        await tx
+          .update(rentals)
+          .set({ 
+            currentPeriodStartDate: newStartDate.toISOString(),
+            currentPeriodEndDate: newEndDate.toISOString(),
+            updatedAt: new Date().toISOString() 
+          })
+          .where(eq(rentals.id, rentalId));
+      });
       
       // Send notification to customer
       try {
-        await fastify.notification.send(
+        const newEndDate = new Date(rental.currentPeriodEndDate);
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
+        
+        await notificationService.send(
           rental.customerId,
           'Rental Renewed Successfully',
-          `Your rental for ${rental.product.name} has been renewed until ${newEndDate.toLocaleDateString()}.`,
+          `Your rental for ${rental.product?.name} has been renewed until ${newEndDate.toLocaleDateString()}.`,
           NotificationType.PAYMENT_SUCCESS,
           [NotificationChannel.PUSH, NotificationChannel.EMAIL],
           rentalId,
@@ -346,12 +407,21 @@ export async function verifyRenewalPayment(
       
       return true;
     } else {
+      // Update payment status to failed
+      await fastify.db
+        .update(payments)
+        .set({ 
+          status: PaymentStatus.FAILED,
+          updatedAt: new Date().toISOString() 
+        })
+        .where(eq(payments.id, payment.id));
+      
       // Send notification about failed payment
       try {
-        await fastify.notification.send(
+        await notificationService.send(
           rental.customerId,
           'Rental Renewal Failed',
-          `Your payment for the renewal of ${rental.product.name} could not be verified.`,
+          `Your payment for the renewal of ${rental.product?.name} could not be verified. Please try again.`,
           NotificationType.PAYMENT_FAILURE,
           [NotificationChannel.PUSH, NotificationChannel.EMAIL],
           rentalId,
@@ -365,13 +435,23 @@ export async function verifyRenewalPayment(
     }
   } catch (error) {
     fastify.log.error(`Payment verification error: ${error}`);
+    
+    // Update payment status to failed
+    await fastify.db
+      .update(payments)
+      .set({ 
+        status: PaymentStatus.FAILED,
+        updatedAt: new Date().toISOString() 
+      })
+      .where(eq(payments.id, payment.id));
+    
     return false;
   }
 }
 
 // Check for expiring rentals and send notifications
 export async function checkExpiringRentals() {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const now = new Date();
   const sevenDaysLater = new Date(now);
@@ -381,7 +461,6 @@ export async function checkExpiringRentals() {
   const expiringRentals = await fastify.db.query.rentals.findMany({
     where: and(
       eq(rentals.status, RentalStatus.ACTIVE),
-      // currentPeriodEndDate is between now and 7 days from now
       lte(rentals.currentPeriodEndDate, sevenDaysLater.toISOString()),
       gte(rentals.currentPeriodEndDate, now.toISOString())
     ),
@@ -397,10 +476,10 @@ export async function checkExpiringRentals() {
     const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
     try {
-      await fastify.notification.send(
+      await notificationService.send(
         rental.customerId,
         'Rental Period Ending Soon',
-        `Your rental period for ${rental.product.name} will end in ${daysRemaining} days. Please renew to continue using the product.`,
+        `Your rental period for ${rental.product?.name} will end in ${daysRemaining} days. Please renew to continue using the product.`,
         NotificationType.RENTAL_REMINDER,
         [NotificationChannel.PUSH, NotificationChannel.EMAIL],
         rental.id,
@@ -414,7 +493,7 @@ export async function checkExpiringRentals() {
 
 // Get all payments for a rental
 export async function getRentalPayments(rentalId: string) {
-  const fastify = (global as any).fastify as FastifyInstance;
+  const fastify = getFastifyInstance();
   
   const rental = await getRentalById(rentalId);
   if (!rental) {
@@ -422,7 +501,7 @@ export async function getRentalPayments(rentalId: string) {
   }
   
   const results = await fastify.db.query.payments.findMany({
-    where: eq(fastify.db.query.payments.orderId, rental.orderId),
+    where: eq(payments.orderId, rental.orderId),
     orderBy: (payments, { desc }) => [desc(payments.createdAt)]
   });
   
