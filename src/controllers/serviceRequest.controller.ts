@@ -43,16 +43,56 @@ export async function getServiceRequestById(
   }
 }
 
-// Create a new service request
+// Create a new service request - Updated to handle form-data
 export async function createServiceRequest(
-  request: FastifyRequest<{ Body: any }>,
+  request: FastifyRequest,
   reply: FastifyReply
 ) {
   try {
     const user = request.user;
-    const sr = await serviceRequestService.createServiceRequest(request.body, user);
+    
+    // Handle form-data parsing
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field (likely "images")
+        const filename = `service-requests/${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        // Upload to S3 if available
+        if (request.server.uploadToS3) {
+          const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+          images.push(uploadedUrl);
+        }
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    // Prepare service request data
+    const serviceRequestData = {
+      productId: fields.productId,
+      orderId: fields.orderId || undefined,
+      type: fields.type,
+      description: fields.description,
+      scheduledDate: fields.scheduledDate || undefined,
+      images: images // Add images to the service request data
+    };
+
+    console.log('Service request data:', serviceRequestData);
+
+    const sr = await serviceRequestService.createServiceRequest(serviceRequestData, user);
     return reply.code(201).send({ message: 'Service request created', serviceRequest: sr });
   } catch (error) {
+    console.error('Error creating service request:', error);
     handleError(error, request, reply);
   }
 }
@@ -87,4 +127,4 @@ export async function assignServiceAgent(
   } catch (error) {
     handleError(error, request, reply);
   }
-} 
+}

@@ -148,7 +148,7 @@ export const rentals = sqliteTable("rentals", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-/* Service Requests */
+/* Service Requests - Updated to include images field */
 export const serviceRequests = sqliteTable("service_requests", {
   id: text("id").primaryKey(),
   customerId: text("customer_id").notNull().references(() => users.id),
@@ -156,6 +156,7 @@ export const serviceRequests = sqliteTable("service_requests", {
   orderId: text("order_id").references(() => orders.id),
   type: text("type", { enum: Object.values(ServiceRequestType) }).notNull(),
   description: text("description").notNull(),
+  images: text("images"), // JSON string array for uploaded images
   status: text("status", { enum: Object.values(ServiceRequestStatus) }).notNull().default(ServiceRequestStatus.CREATED),
   assignedToId: text("assigned_to_id").references(() => users.id),
   franchiseAreaId: text("franchise_area_id").notNull().references(() => franchiseAreas.id),

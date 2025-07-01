@@ -37,12 +37,51 @@ export default async function (fastify: FastifyInstance) {
     (request, reply) => getServiceRequestById(request as any, reply as any)
   );
 
-  // Create a new service request
+  // Create a new service request - Updated to handle form-data
   fastify.post(
     '/',
     {
-      schema: createServiceRequestSchema,
+      schema: {
+        consumes: ['multipart/form-data'],
+        body: {
+          type: 'object',
+          required: ['productId', 'type', 'description'],
+          properties: {
+            productId: { type: 'string' },
+            orderId: { type: 'string' },
+            type: { type: 'string' },
+            description: { type: 'string' },
+            scheduledDate: { type: 'string' },
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+            },
+          },
+        },
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          },
+          400: {
+            type: 'object',
+            properties: {
+              statusCode: { type: 'number' },
+              error: { type: 'string' },
+              message: { type: 'string' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Create a new service request",
+        description: "Create a new service request for a product/order with optional image attachments",
+        security: [{ bearerAuth: [] }],
+      },
       preHandler: [fastify.authenticate],
+      validatorCompiler: () => () => true // Turn off validation for form-data
     },
     (request, reply) => createServiceRequest(request as any, reply as any)
   );
@@ -68,4 +107,4 @@ export default async function (fastify: FastifyInstance) {
   );
 
   fastify.log.info('Service Request routes registered');
-} 
+}

@@ -58,11 +58,13 @@ export async function getServiceRequestById(id: string) {
   return result;
 }
 
-// Create a new service request
+// Create a new service request - Updated to handle images
 export async function createServiceRequest(data: any, user: any) {
   const fastify = getFastifyInstance();
   const id = await generateId('srq');
   const now = new Date().toISOString();
+
+  console.log('Creating service request with data:', data);
 
   // Get product and franchise area
   const product = await fastify.db.query.products.findFirst({ where: eq(products.id, data.productId) });
@@ -81,6 +83,7 @@ export async function createServiceRequest(data: any, user: any) {
     orderId: data.orderId || null,
     type: data.type,
     description: data.description,
+    images: data.images && data.images.length > 0 ? JSON.stringify(data.images) : null, // Store images as JSON
     status: ServiceRequestStatus.CREATED,
     assignedToId: null,
     franchiseAreaId,
@@ -89,6 +92,8 @@ export async function createServiceRequest(data: any, user: any) {
     createdAt: now,
     updatedAt: now,
   };
+
+  console.log('Inserting service request:', serviceRequest);
 
   await fastify.db.insert(serviceRequests).values(serviceRequest);
 
