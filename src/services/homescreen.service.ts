@@ -26,7 +26,7 @@ export async function getHomescreenData(userId?: string) {
 async function getPopularProducts() {
   const fastify = getFastifyInstance();
   
-  // Get products with order counts
+  // Get products with order counts using raw SQL to avoid relation issues
   const popularProductsQuery = await fastify.db
     .select({
       id: products.id,
@@ -55,29 +55,46 @@ async function getPopularProducts() {
 async function getRecentOrders(userId: string) {
   const fastify = getFastifyInstance();
   
-  const recentOrdersQuery = await fastify.db.query.orders.findMany({
-    where: eq(orders.customerId, userId),
-    with: {
-      product: true
-    },
-    orderBy: [desc(orders.createdAt)],
-    limit: 5
-  });
+  // Get recent orders without using relations - use separate queries
+  const recentOrdersQuery = await fastify.db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, userId))
+    .orderBy(desc(orders.createdAt))
+    .limit(5);
   
-  return recentOrdersQuery.map(order => ({
-    id: order.id,
-    items: [{
-      productId: order.product.id,
-      name: order.product.name,
-      price: order.totalAmount,
-      quantity: 1, // Assuming 1 quantity per order for water purifiers
-      image: JSON.parse(order.product.images)[0] || 'https://images.pexels.com/photos/416528/pexels-photo-416528.jpeg'
-    }],
-    total: order.totalAmount,
-    status: order.status.toLowerCase(),
-    orderDate: order.createdAt.split('T')[0],
-    deliveryDate: order.installationDate ? order.installationDate.split('T')[0] : null
-  }));
+  // Get product details for each order
+  const ordersWithProducts = await Promise.all(
+    recentOrdersQuery.map(async (order) => {
+      const product = await fastify.db
+        .select()
+        .from(products)
+        .where(eq(products.id, order.productId))
+        .limit(1);
+      
+      return {
+        ...order,
+        product: product[0] || null
+      };
+    })
+  );
+  
+  return ordersWithProducts
+    .filter(order => order.product) // Only include orders with valid products
+    .map(order => ({
+      id: order.id,
+      items: [{
+        productId: order.product.id,
+        name: order.product.name,
+        price: order.totalAmount,
+        quantity: 1, // Assuming 1 quantity per order for water purifiers
+        image: JSON.parse(order.product.images)[0] || 'https://images.pexels.com/photos/416528/pexels-photo-416528.jpeg'
+      }],
+      total: order.totalAmount,
+      status: order.status.toLowerCase(),
+      orderDate: order.createdAt.split('T')[0],
+      deliveryDate: order.installationDate ? order.installationDate.split('T')[0] : null
+    }));
 }
 
 async function getActiveCoupons() {

@@ -192,9 +192,12 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-
+// Define relations properly
 export const productRelations = relations(products, ({ many }) => ({
   features: many(productFeatures),
+  orders: many(orders),
+  rentals: many(rentals),
+  serviceRequests: many(serviceRequests),
 }));
 
 export const productFeatureRelations = relations(productFeatures, ({ one }) => ({
@@ -204,21 +207,108 @@ export const productFeatureRelations = relations(productFeatures, ({ one }) => (
   }),
 }));
 
-
-export const usersRelations = relations(users, ({ one }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   franchiseArea: one(franchiseAreas, {
     fields: [users.franchiseAreaId],
     references: [franchiseAreas.id],
   }),
+  orders: many(orders, { relationName: "customerOrders" }),
+  assignedOrders: many(orders, { relationName: "agentOrders" }),
+  rentals: many(rentals),
+  serviceRequests: many(serviceRequests, { relationName: "customerServiceRequests" }),
+  assignedServiceRequests: many(serviceRequests, { relationName: "agentServiceRequests" }),
+  notifications: many(notifications),
+  pushSubscriptions: many(pushSubscriptions),
 }));
 
-export const franchiseAreaRelations = relations(franchiseAreas, ({ many }) => ({
-  owner: many(users),
+export const franchiseAreaRelations = relations(franchiseAreas, ({ many, one }) => ({
+  users: many(users),
+  serviceRequests: many(serviceRequests),
+  owner: one(users, {
+    fields: [franchiseAreas.ownerId],
+    references: [users.id],
+  }),
 }));
 
+export const orderRelations = relations(orders, ({ one, many }) => ({
+  customer: one(users, {
+    fields: [orders.customerId],
+    references: [users.id],
+    relationName: "customerOrders",
+  }),
+  serviceAgent: one(users, {
+    fields: [orders.serviceAgentId],
+    references: [users.id],
+    relationName: "agentOrders",
+  }),
+  product: one(products, {
+    fields: [orders.productId],
+    references: [products.id],
+  }),
+  payments: many(payments),
+  rental: one(rentals),
+}));
 
+export const paymentRelations = relations(payments, ({ one }) => ({
+  order: one(orders, {
+    fields: [payments.orderId],
+    references: [orders.id],
+  }),
+}));
 
+export const rentalRelations = relations(rentals, ({ one }) => ({
+  order: one(orders, {
+    fields: [rentals.orderId],
+    references: [orders.id],
+  }),
+  customer: one(users, {
+    fields: [rentals.customerId],
+    references: [users.id],
+  }),
+  product: one(products, {
+    fields: [rentals.productId],
+    references: [products.id],
+  }),
+}));
 
+export const serviceRequestRelations = relations(serviceRequests, ({ one }) => ({
+  customer: one(users, {
+    fields: [serviceRequests.customerId],
+    references: [users.id],
+    relationName: "customerServiceRequests",
+  }),
+  assignedTo: one(users, {
+    fields: [serviceRequests.assignedToId],
+    references: [users.id],
+    relationName: "agentServiceRequests",
+  }),
+  product: one(products, {
+    fields: [serviceRequests.productId],
+    references: [products.id],
+  }),
+  order: one(orders, {
+    fields: [serviceRequests.orderId],
+    references: [orders.id],
+  }),
+  franchiseArea: one(franchiseAreas, {
+    fields: [serviceRequests.franchiseAreaId],
+    references: [franchiseAreas.id],
+  }),
+}));
+
+export const notificationRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const pushSubscriptionRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
 
 export type franchiseArea = InferSelectModel<typeof franchiseAreas>;
 export type User = InferSelectModel<typeof users>;
