@@ -124,12 +124,21 @@ export async function getOrderById(id: string) {
   return result;
 }
 
-// Create a new order
+// Create a new order with user details
 export async function createOrder(data: {
   productId: string;
   customerId: string;
   type: OrderType;
   installationDate?: Date;
+  userDetails?: {
+    name: string;
+    email?: string;
+    address?: string;
+    phone?: string;
+    alternativePhone?: string;
+    latitude?: number;
+    longitude?: number;
+  };
 }) {
   const fastify = getFastifyInstance();
   
@@ -151,28 +160,10 @@ export async function createOrder(data: {
     throw badRequest('This product is not available for rental');
   }
   
-  // Get customer info to determine franchise area
+  // Get customer info
   const customer = await userService.getUserById(data.customerId);
   if (!customer) {
     throw notFound('Customer');
-  }
-  
-  // Find franchise area if not already assigned to the customer
-  let franchiseAreaId = customer.franchiseAreaId;
-  if (!franchiseAreaId && customer.location) {
-    franchiseAreaId = await franchiseService.findFranchiseAreaForLocation(customer.location);
-    
-    // Update customer's franchise area if found
-    if (franchiseAreaId) {
-      await fastify.db
-        .update(users)
-        .set({ franchiseAreaId, updatedAt: new Date().toISOString() })
-        .where(eq(users.id, data.customerId));
-    }
-  }
-  
-  if (!franchiseAreaId) {
-    throw badRequest('No franchise area available for this location. Please contact support.');
   }
   
   const orderId = await generateId('ord');
@@ -184,6 +175,49 @@ export async function createOrder(data: {
   
   // Create the order in a transaction
   const createdOrder = await fastify.db.transaction(async (tx) => {
+    // Update user details if provided
+    if (data.userDetails) {
+      const updateData: any = {
+        updatedAt: new Date().toISOString()
+      };
+      
+      if (data.userDetails.name) updateData.name = data.userDetails.name;
+      if (data.userDetails.email) updateData.email = data.userDetails.email;
+      if (data.userDetails.address) updateData.address = data.userDetails.address;
+      if (data.userDetails.phone) updateData.phone = data.userDetails.phone;
+      if (data.userDetails.alternativePhone) updateData.alternativePhone = data.userDetails.alternativePhone;
+      
+      // Update location if provided
+      if (data.userDetails.latitude && data.userDetails.longitude) {
+        updateData.locationLatitude = data.userDetails.latitude;
+        updateData.locationLongitude = data.userDetails.longitude;
+        
+        // Find and assign franchise area based on new location
+        const franchiseAreaId = await franchiseService.findFranchiseAreaForLocation({
+          latitude: data.userDetails.latitude,
+          longitude: data.userDetails.longitude
+        });
+        
+        if (franchiseAreaId) {
+          updateData.franchiseAreaId = franchiseAreaId;
+        }
+      }
+      
+      await tx
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, data.customerId));
+    }
+    
+    // Get updated customer info for franchise area
+    const updatedCustomer = await tx.query.users.findFirst({
+      where: eq(users.id, data.customerId)
+    });
+    
+    if (!updatedCustomer?.franchiseAreaId) {
+      throw badRequest('No franchise area available for this location. Please contact support.');
+    }
+    
     // Create the order
     await tx.insert(orders).values({
       id: orderId,
@@ -391,6 +425,42 @@ export async function assignServiceAgent(id: string, serviceAgentId: string, use
   }
   
   return getOrderById(id);
+}
+
+// Notify all available service agents about new order
+export async function notifyAvailableServiceAgents(orderId: string, franchiseAreaId?: string) {
+  const fastify = getFastifyInstance();
+  
+  try {
+    const order = await getOrderById(orderId);
+    if (!order) {
+      throw notFound('Order');
+    }
+    
+    // Get all available service agents (franchise + global)
+    const availableAgents = await franchiseService.getAllAvailableServiceAgents(franchiseAreaId);
+    
+    // Send notification to all available agents
+    for (const agent of availableAgents) {
+      try {
+        await notificationService.send(
+          agent.id,
+          'New Order Available',
+          `A new ${order.type} order for ${order.product?.name} is available for assignment in your area.`,
+          NotificationType.SERVICE_REQUEST,
+          [NotificationChannel.PUSH, NotificationChannel.EMAIL],
+          orderId,
+          'order'
+        );
+      } catch (error) {
+        fastify.log.error(`Failed to send notification to agent ${agent.id}: ${error}`);
+      }
+    }
+    
+    fastify.log.info(`Notified ${availableAgents.length} service agents about order ${orderId}`);
+  } catch (error) {
+    fastify.log.error(`Failed to notify service agents about order ${orderId}: ${error}`);
+  }
 }
 
 // Update installation date
@@ -602,6 +672,10 @@ export async function verifyPayment(
       } catch (error) {
         fastify.log.error(`Failed to send notification: ${error}`);
       }
+      
+      // Notify all available service agents about the new paid order
+      const customer = await userService.getUserById(order.customerId);
+      await notifyAvailableServiceAgents(orderId, customer?.franchiseAreaId);
       
       return true;
     } else {

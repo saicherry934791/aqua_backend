@@ -14,25 +14,41 @@ export async function generateId(prefix: string): Promise<string> {
 /**
  * Check if a point is inside a polygon
  * @param point The point coordinates
- * @param polygon The polygon coordinates
+ * @param polygon The polygon coordinates (array of lat/lng objects or GeoJSON)
  * @returns true if the point is inside the polygon, false otherwise
  */
-export function isPointInPolygon(point: GeoLocation, polygon: GeoPolygon): boolean {
-  if (  !polygon.coordinates || !polygon.coordinates[0]) {
+export function isPointInPolygon(point: GeoLocation, polygon: GeoPolygon | Array<{latitude: number, longitude: number}>): boolean {
+  let coordinates: number[][];
+  
+  // Handle different polygon formats
+  if (Array.isArray(polygon)) {
+    // Handle array of {latitude, longitude} objects
+    coordinates = polygon.map(p => [p.longitude, p.latitude]);
+  } else if (polygon.coordinates && polygon.coordinates[0]) {
+    // Handle GeoJSON format
+    coordinates = polygon.coordinates[0];
+  } else {
     return false;
   }
-
+  
+  // Ensure polygon is closed (first point equals last point)
+  if (coordinates.length > 0) {
+    const firstPoint = coordinates[0];
+    const lastPoint = coordinates[coordinates.length - 1];
+    if (firstPoint[0] !== lastPoint[0] || firstPoint[1] !== lastPoint[1]) {
+      coordinates.push([firstPoint[0], firstPoint[1]]);
+    }
+  }
+  
   const x = point.longitude;
   const y = point.latitude;
   
-  const vs = polygon.coordinates[0]; // First polygon (we don't handle holes)
-  
   let inside = false;
-  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-    const xi = vs[i][0];
-    const yi = vs[i][1];
-    const xj = vs[j][0];
-    const yj = vs[j][1];
+  for (let i = 0, j = coordinates.length - 1; i < coordinates.length; j = i++) {
+    const xi = coordinates[i][0];
+    const yi = coordinates[i][1];
+    const xj = coordinates[j][0];
+    const yj = coordinates[j][1];
 
     const intersect = ((yi > y) !== (yj > y))
         && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
@@ -50,10 +66,23 @@ export function isPointInPolygon(point: GeoLocation, polygon: GeoPolygon): boole
  */
 export function findFranchiseAreaForLocation(
   point: GeoLocation, 
-  franchiseAreas: Array<{ id: string; geoPolygon: GeoPolygon }>
+  franchiseAreas: Array<{ id: string; geoPolygon: any }>
 ): string | undefined {
   for (const area of franchiseAreas) {
-    if (isPointInPolygon(point, area.geoPolygon)) {
+    let polygon;
+    
+    // Parse the geoPolygon if it's a string
+    if (typeof area.geoPolygon === 'string') {
+      try {
+        polygon = JSON.parse(area.geoPolygon);
+      } catch (e) {
+        continue;
+      }
+    } else {
+      polygon = area.geoPolygon;
+    }
+    
+    if (isPointInPolygon(point, polygon)) {
       return area.id;
     }
   }
@@ -111,4 +140,24 @@ export function parseJsonSafe<T>(jsonString: string | null | undefined, defaultV
  */
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
+}
+
+/**
+ * Normalize polygon coordinates to ensure proper closure
+ * @param coordinates Array of coordinate pairs
+ * @returns Normalized coordinates with proper closure
+ */
+export function normalizePolygonCoordinates(coordinates: Array<{latitude: number, longitude: number}>): Array<{latitude: number, longitude: number}> {
+  if (coordinates.length === 0) return coordinates;
+  
+  const normalized = [...coordinates];
+  const firstPoint = normalized[0];
+  const lastPoint = normalized[normalized.length - 1];
+  
+  // Ensure polygon is closed
+  if (firstPoint.latitude !== lastPoint.latitude || firstPoint.longitude !== lastPoint.longitude) {
+    normalized.push({ latitude: firstPoint.latitude, longitude: firstPoint.longitude });
+  }
+  
+  return normalized;
 }

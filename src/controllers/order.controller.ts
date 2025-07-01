@@ -77,12 +77,21 @@ export async function createOrder(
       productId: string;
       type: OrderType;
       installationDate?: string;
+      userDetails?: {
+        name: string;
+        email?: string;
+        address?: string;
+        phone?: string;
+        alternativePhone?: string;
+        latitude?: number;
+        longitude?: number;
+      };
     } 
   }>,
   reply: FastifyReply
 ) {
   try {
-    const { productId, type, installationDate } = request.body;
+    const { productId, type, installationDate, userDetails } = request.body;
     const customerId = request.user.userId;
     
     // Validate product
@@ -114,7 +123,8 @@ export async function createOrder(
       productId,
       customerId,
       type,
-      installationDate: parsedInstallationDate
+      installationDate: parsedInstallationDate,
+      userDetails
     });
     
     return reply.code(201).send({ 

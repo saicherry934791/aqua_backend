@@ -44,6 +44,17 @@ export const OrderSchema = z.object({
   payments: z.array(PaymentSchema).optional(),
 });
 
+// User Details Schema for checkout
+export const UserDetailsSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email().optional(),
+  address: z.string().min(5, 'Address must be at least 5 characters').optional(),
+  phone: z.string().regex(/^\d{10}$/, 'Phone must be 10 digits').optional(),
+  alternativePhone: z.string().regex(/^\d{10}$/, 'Alternative phone must be 10 digits').optional(),
+  latitude: z.number().min(-90).max(90, 'Invalid latitude').optional(),
+  longitude: z.number().min(-180).max(180, 'Invalid longitude').optional(),
+});
+
 // Get All Orders Schema
 export const GetAllOrdersQuerySchema = z.object({
   status: z.enum(Object.values(OrderStatus) as [OrderStatus, ...OrderStatus[]]).optional(),
@@ -116,6 +127,7 @@ export const CreateOrderRequestSchema = z.object({
   productId: z.string(),
   type: z.enum([OrderType.PURCHASE, OrderType.RENTAL]),
   installationDate: z.string().optional(),
+  userDetails: UserDetailsSchema.optional(),
 });
 
 export const CreateOrderResponseSchema = z.object({
@@ -132,7 +144,7 @@ export const createOrderSchema = {
   },
   tags: ["orders"],
   summary: "Create a new order",
-  description: "Create a new purchase or rental order",
+  description: "Create a new purchase or rental order with optional user details update",
   security: [{ bearerAuth: [] }],
 };
 
@@ -260,6 +272,7 @@ export const InitiatePaymentResponseSchema = z.object({
   message: z.string(),
   paymentInfo: z.object({
     orderId: z.string(),
+    paymentId: z.string(),
     razorpayOrderId: z.string(),
     amount: z.number(),
     currency: z.string(),
