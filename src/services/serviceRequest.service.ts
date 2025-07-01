@@ -9,32 +9,32 @@ import { getFastifyInstance } from '../shared/fastify-instance';
 
 // Get all service requests (with optional filters)
 export async function getAllServiceRequests(filters: any, user: any) {
-  const fastify = getFastifyInstance()
-  let whereClause: any = [];
+  const fastify = getFastifyInstance();
+  let whereConditions: any[] = [];
 
   // Role-based filtering
   if (user.role === UserRole.FRANCHISE_OWNER) {
     if (!user.franchiseAreaId) return [];
-    whereClause.push(eq(serviceRequests.franchiseAreaId, user.franchiseAreaId));
+    whereConditions.push(eq(serviceRequests.franchiseAreaId, user.franchiseAreaId));
   } else if (user.role === UserRole.SERVICE_AGENT) {
-    whereClause.push(eq(serviceRequests.assignedToId, user.id));
+    whereConditions.push(eq(serviceRequests.assignedToId, user.userId));
   } else if (user.role === UserRole.CUSTOMER) {
-    whereClause.push(eq(serviceRequests.customerId, user.id));
+    whereConditions.push(eq(serviceRequests.customerId, user.userId));
   }
 
   // Additional filters
   if (filters.status) {
-    whereClause.push(eq(serviceRequests.status, filters.status));
+    whereConditions.push(eq(serviceRequests.status, filters.status));
   }
   if (filters.type) {
-    whereClause.push(eq(serviceRequests.type, filters.type));
+    whereConditions.push(eq(serviceRequests.type, filters.type));
   }
   if (filters.franchiseAreaId) {
-    whereClause.push(eq(serviceRequests.franchiseAreaId, filters.franchiseAreaId));
+    whereConditions.push(eq(serviceRequests.franchiseAreaId, filters.franchiseAreaId));
   }
 
   const results = await fastify.db.query.serviceRequests.findMany({
-    where: whereClause.length ? and(...whereClause) : undefined,
+    where: whereConditions.length ? and(...whereConditions) : undefined,
     with: {
       customer: true,
       product: true,
@@ -46,7 +46,7 @@ export async function getAllServiceRequests(filters: any, user: any) {
 
 // Get service request by ID
 export async function getServiceRequestById(id: string) {
-  const fastify = getFastifyInstance()
+  const fastify = getFastifyInstance();
   const result = await fastify.db.query.serviceRequests.findFirst({
     where: eq(serviceRequests.id, id),
     with: {
@@ -60,7 +60,7 @@ export async function getServiceRequestById(id: string) {
 
 // Create a new service request
 export async function createServiceRequest(data: any, user: any) {
-  const fastify = getFastifyInstance()
+  const fastify = getFastifyInstance();
   const id = await generateId('srq');
   const now = new Date().toISOString();
 
@@ -76,7 +76,7 @@ export async function createServiceRequest(data: any, user: any) {
 
   const serviceRequest = {
     id,
-    customerId: user.id,
+    customerId: user.userId,
     productId: data.productId,
     orderId: data.orderId || null,
     type: data.type,
@@ -94,7 +94,7 @@ export async function createServiceRequest(data: any, user: any) {
 
   // Send notification to admin/franchise owner
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       null, // broadcast to admins/franchise owners
       'New Service Request',
       `A new service request has been created by ${user.name}.`,
@@ -112,7 +112,7 @@ export async function createServiceRequest(data: any, user: any) {
 
 // Update service request status
 export async function updateServiceRequestStatus(id: string, status: ServiceRequestStatus, user: any) {
-  const fastify = getFastifyInstance()
+  const fastify = getFastifyInstance();
   const sr = await getServiceRequestById(id);
   if (!sr) throw notFound('Service Request');
 
@@ -120,7 +120,7 @@ export async function updateServiceRequestStatus(id: string, status: ServiceRequ
   const hasPermission =
     user.role === UserRole.ADMIN ||
     (user.role === UserRole.FRANCHISE_OWNER && sr.franchiseAreaId === user.franchiseAreaId) ||
-    (user.role === UserRole.SERVICE_AGENT && sr.assignedToId === user.id);
+    (user.role === UserRole.SERVICE_AGENT && sr.assignedToId === user.userId);
   if (!hasPermission) throw forbidden('You do not have permission to update this service request');
 
   await fastify.db.update(serviceRequests).set({
@@ -131,7 +131,7 @@ export async function updateServiceRequestStatus(id: string, status: ServiceRequ
 
   // Send notification to customer
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       sr.customerId,
       'Service Request Status Updated',
       `Your service request status is now: ${status}.`,
@@ -149,7 +149,7 @@ export async function updateServiceRequestStatus(id: string, status: ServiceRequ
 
 // Assign service agent
 export async function assignServiceAgent(id: string, assignedToId: string, user: any) {
-  const fastify = getFastifyInstance()
+  const fastify = getFastifyInstance();
   const sr = await getServiceRequestById(id);
   if (!sr) throw notFound('Service Request');
 
@@ -172,7 +172,7 @@ export async function assignServiceAgent(id: string, assignedToId: string, user:
 
   // Send notification to agent
   try {
-    await fastify.notification.send(
+    await notificationService.send(
       assignedToId,
       'New Service Assignment',
       `You have been assigned a new service request.`,
@@ -186,4 +186,4 @@ export async function assignServiceAgent(id: string, assignedToId: string, user:
   }
 
   return await getServiceRequestById(id);
-} 
+}
