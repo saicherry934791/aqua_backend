@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, isNull } from 'drizzle-orm';
 import { orders, payments, users, products, rentals, franchiseAreas } from '../models/schema';
 import * as userService from './user.service';
 import * as franchiseService from './franchise.service';
@@ -144,6 +144,8 @@ export async function getOrderById(id: string) {
 export async function getAvailableServiceAgentsForOrder(orderId: string) {
   const fastify = getFastifyInstance();
 
+  console.log('Getting available service agents for order:', orderId);
+
   const order = await getOrderById(orderId);
   if (!order) {
     throw notFound('Order');
@@ -159,18 +161,19 @@ export async function getAvailableServiceAgentsForOrder(orderId: string) {
   }
 
   const franchiseAreaId = customer.franchiseAreaId;
+  console.log('Customer franchise area ID:', franchiseAreaId);
 
-  // Get franchise-specific and global service agents
+  // Get franchise-specific and global service agents using corrected query
   let whereConditions;
   
   if (franchiseAreaId) {
-    // Get agents from specific franchise area OR global agents (no franchise area assigned)
+    // Get agents from specific franchise area OR global agents (franchise_area_id IS NULL)
     whereConditions = and(
       eq(users.role, UserRole.SERVICE_AGENT),
       eq(users.isActive, true),
       or(
         eq(users.franchiseAreaId, franchiseAreaId),
-        eq(users.franchiseAreaId, null) // Global agents
+        isNull(users.franchiseAreaId) // Use isNull() instead of eq(users.franchiseAreaId, null)
       )
     );
   } else {
@@ -178,9 +181,11 @@ export async function getAvailableServiceAgentsForOrder(orderId: string) {
     whereConditions = and(
       eq(users.role, UserRole.SERVICE_AGENT),
       eq(users.isActive, true),
-      eq(users.franchiseAreaId, null)
+      isNull(users.franchiseAreaId) // Use isNull() instead of eq(users.franchiseAreaId, null)
     );
   }
+
+  console.log('Built where conditions for service agents query');
 
   const availableAgents = await fastify.db.query.users.findMany({
     where: whereConditions,
@@ -188,6 +193,13 @@ export async function getAvailableServiceAgentsForOrder(orderId: string) {
       franchiseArea: true
     }
   });
+
+  console.log(`Found ${availableAgents.length} available agents:`, availableAgents.map(a => ({
+    id: a.id,
+    name: a.name,
+    franchiseAreaId: a.franchiseAreaId,
+    isGlobal: !a.franchiseAreaId
+  })));
 
   // Format the response with additional info
   return availableAgents.map(agent => ({

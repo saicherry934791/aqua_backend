@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray } from 'drizzle-orm';
 import { type franchiseArea, franchiseAreas, User, users } from '../models/schema';
 import { GeoLocation, GeoPolygon, UserRole } from '../types';
 import { isPointInPolygon, parseJsonSafe, generateId, normalizePolygonCoordinates } from '../utils/helpers';
@@ -461,24 +461,38 @@ export async function getServiceAgents(id: string) {
 export async function getAllAvailableServiceAgents(franchiseAreaId?: string) {
   const fastify = getFastifyInstance();
   
+  console.log('Getting available service agents for franchise area:', franchiseAreaId);
+  
+  // Build the where conditions
   let whereConditions = and(
     eq(users.role, UserRole.SERVICE_AGENT),
     eq(users.isActive, true)
   );
   
-  // Get agents from the specific franchise area OR global agents (no franchise area assigned)
   if (franchiseAreaId) {
+    // Get agents from the specific franchise area OR global agents (no franchise area assigned)
     whereConditions = and(
       eq(users.role, UserRole.SERVICE_AGENT),
       eq(users.isActive, true),
-      // Either assigned to this franchise area OR global (no franchise area)
-      sql`(${users.franchiseAreaId} = ${franchiseAreaId} OR ${users.franchiseAreaId} IS NULL)`
+      or(
+        eq(users.franchiseAreaId, franchiseAreaId),
+        eq(users.franchiseAreaId, null) // This should be `null` not a string
+      )
     );
   }
+  
+  console.log('Where conditions built for service agents query');
   
   const agents = await fastify.db.query.users.findMany({
     where: whereConditions,
   });
+  
+  console.log(`Found ${agents.length} available service agents:`, agents.map(a => ({
+    id: a.id,
+    name: a.name,
+    franchiseAreaId: a.franchiseAreaId,
+    isGlobal: !a.franchiseAreaId
+  })));
   
   return agents;
 }
