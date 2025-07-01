@@ -11,6 +11,8 @@ export async function getAllServiceRequests(
   try {
     const filters = request.query;
     const user = request.user;
+
+    console.log('user is inservcie requests ',user)
     const serviceRequests = await serviceRequestService.getAllServiceRequests(filters, user);
     return reply.code(200).send({ serviceRequests });
   } catch (error) {

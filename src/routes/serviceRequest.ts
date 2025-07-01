@@ -21,7 +21,8 @@ export default async function (fastify: FastifyInstance) {
     '/',
     {
       schema: getAllServiceRequestsSchema,
-      preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER, UserRole.SERVICE_AGENT])],
+      preHandler: [fastify.authenticate],
+      // preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER, UserRole.SERVICE_AGENT,UserRole.CUSTOMER])],
     },
     (request, reply) => getAllServiceRequests(request as any, reply as any)
   );
