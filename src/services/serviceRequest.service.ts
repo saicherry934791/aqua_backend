@@ -3,7 +3,7 @@ import { eq, and, or, inArray } from 'drizzle-orm';
 import { serviceRequests, users, products, orders, franchiseAreas } from '../models/schema';
 import * as notificationService from './notification.service';
 import { ServiceRequestStatus, ServiceRequestType, UserRole, NotificationType, NotificationChannel } from '../types';
-import { generateId } from '../utils/helpers';
+import { generateId, parseJsonSafe } from '../utils/helpers';
 import { notFound, badRequest, forbidden } from '../utils/errors';
 import { getFastifyInstance } from '../shared/fastify-instance';
 
@@ -41,7 +41,16 @@ export async function getAllServiceRequests(filters: any, user: any) {
       assignedTo: true,
     },
   });
-  return results;
+
+  // Process results to ensure proper data structure and parse images
+  return results.map(sr => ({
+    ...sr,
+    images: parseJsonSafe<string[]>(sr.images, []), // Parse images JSON string to array
+    product: sr.product ? {
+      ...sr.product,
+      images: parseJsonSafe<string[]>(sr.product.images as any, [])
+    } : null
+  }));
 }
 
 // Get service request by ID
@@ -55,7 +64,18 @@ export async function getServiceRequestById(id: string) {
       assignedTo: true,
     },
   });
-  return result;
+
+  if (!result) return null;
+
+  // Process result to ensure proper data structure and parse images
+  return {
+    ...result,
+    images: parseJsonSafe<string[]>(result.images, []), // Parse images JSON string to array
+    product: result.product ? {
+      ...result.product,
+      images: parseJsonSafe<string[]>(result.product.images as any, [])
+    } : null
+  };
 }
 
 // Create a new service request - Updated to handle images

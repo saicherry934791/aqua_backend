@@ -4,7 +4,7 @@ import { ErrorResponseSchema, UserSchema } from './auth.schema';
 import { ProductSchema } from './product.schema';
 import { ServiceRequestType, ServiceRequestStatus } from '../types';
 
-// Service Request Schema
+// Service Request Schema - Updated to handle images properly
 export const ServiceRequestSchema = z.object({
   id: z.string(),
   customerId: z.string(),
@@ -12,6 +12,7 @@ export const ServiceRequestSchema = z.object({
   orderId: z.string().optional().nullable(),
   type: z.enum(Object.values(ServiceRequestType) as [ServiceRequestType, ...ServiceRequestType[]]),
   description: z.string(),
+  images: z.array(z.string()).optional().default([]), // Images as array of strings
   status: z.enum(Object.values(ServiceRequestStatus) as [ServiceRequestStatus, ...ServiceRequestStatus[]]),
   assignedToId: z.string().optional().nullable(),
   franchiseAreaId: z.string(),
@@ -31,6 +32,7 @@ export const CreateServiceRequestBodySchema = z.object({
   type: z.enum(Object.values(ServiceRequestType) as [ServiceRequestType, ...ServiceRequestType[]]),
   description: z.string().min(5),
   scheduledDate: z.string().optional(),
+  images: z.array(z.string()).optional().default([]), // Images as array of strings
 });
 export const CreateServiceRequestResponseSchema = z.object({
   message: z.string(),
@@ -141,4 +143,4 @@ export const assignServiceAgentSchema = {
   summary: "Assign service agent to service request",
   description: "Assign a service agent to a service request (admin or franchise owner only)",
   security: [{ bearerAuth: [] }],
-}; 
+};
