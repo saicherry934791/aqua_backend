@@ -4,7 +4,7 @@ import { rentals, orders, payments, users, products } from '../models/schema';
 import * as userService from './user.service';
 import * as notificationService from './notification.service';
 import { RentalStatus, UserRole, PaymentStatus, PaymentType, User, NotificationType, NotificationChannel } from '../types';
-import { generateId } from '../utils/helpers';
+import { generateId, parseJsonSafe } from '../utils/helpers';
 import { notFound, badRequest, serverError } from '../utils/errors';
 import crypto from 'crypto';
 import { getFastifyInstance } from '../shared/fastify-instance';
@@ -104,6 +104,10 @@ export async function getRentalById(id: string) {
       order: true,
     },
   });
+
+  if (result && result.product) {
+    result.product.images = parseJsonSafe<string[]>(result.product.images as any, []);
+  }
 
   return result;
 }
