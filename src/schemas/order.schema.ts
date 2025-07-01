@@ -44,6 +44,20 @@ export const OrderSchema = z.object({
   payments: z.array(PaymentSchema).optional(),
 });
 
+// Available Service Agent Schema
+export const AvailableServiceAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  email: z.string().optional().nullable(),
+  franchiseAreaId: z.string().optional().nullable(),
+  franchiseAreaName: z.string(),
+  isGlobalAgent: z.boolean(),
+  createdAt: z.string(),
+  activeOrdersCount: z.number(),
+  completedOrdersCount: z.number(),
+});
+
 // User Details Schema for checkout
 export const UserDetailsSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -119,6 +133,29 @@ export const getOrderByIdSchema = {
   tags: ["orders"],
   summary: "Get order by ID",
   description: "Get an order by its ID (only visible to the customer, assigned service agent, admin, or franchise owner)",
+  security: [{ bearerAuth: [] }],
+};
+
+// Get Available Service Agents Schema
+export const GetAvailableServiceAgentsParamsSchema = z.object({
+  id: z.string(),
+});
+
+export const GetAvailableServiceAgentsResponseSchema = z.object({
+  availableAgents: z.array(AvailableServiceAgentSchema),
+  message: z.string(),
+});
+
+export const getAvailableServiceAgentsSchema = {
+  params: zodToJsonSchema(GetAvailableServiceAgentsParamsSchema),
+  response: {
+    200: zodToJsonSchema(GetAvailableServiceAgentsResponseSchema),
+    403: zodToJsonSchema(ErrorResponseSchema),
+    404: zodToJsonSchema(ErrorResponseSchema),
+  },
+  tags: ["orders"],
+  summary: "Get available service agents for order assignment",
+  description: "Get a list of service agents available for assignment to an order (franchise-specific + global agents)",
   security: [{ bearerAuth: [] }],
 };
 

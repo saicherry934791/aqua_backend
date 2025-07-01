@@ -70,6 +70,30 @@ export async function getOrderById(
   }
 }
 
+// Get available service agents for order assignment
+export async function getAvailableServiceAgents(
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+) {
+  try {
+    const { id } = request.params;
+    
+    // Only admins and franchise owners can view available service agents
+    if (![UserRole.ADMIN, UserRole.FRANCHISE_OWNER].includes(request.user.role)) {
+      throw forbidden('You are not authorized to view available service agents');
+    }
+    
+    const availableAgents = await orderService.getAvailableServiceAgentsForOrder(id);
+    
+    return reply.code(200).send({ 
+      availableAgents,
+      message: 'Available service agents retrieved successfully'
+    });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}
+
 // Create a new order with optional user details update
 export async function createOrder(
   request: FastifyRequest<{ 
@@ -300,15 +324,6 @@ export async function initiatePayment(
     if (!order) {
       throw notFound('Order');
     }
-    //todo
-    // // Only the customer or admin can initiate payment
-    // const hasPermission = 
-    //   request.user.role === UserRole.ADMIN || 
-    //   order.customerId === request.user.userId;
-    
-    // if (!hasPermission) {
-    //   throw forbidden('You do not have permission to make payment for this order');
-    // }
     
     const paymentInfo = await orderService.initiatePayment(id);
     

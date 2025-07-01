@@ -3,6 +3,7 @@ import {
   getAllOrders,
   getUserOrders,
   getOrderById,
+  getAvailableServiceAgents,
   createOrder,
   updateOrderStatus,
   assignServiceAgent,
@@ -15,6 +16,7 @@ import {
   getAllOrdersSchema,
   getUserOrdersSchema,
   getOrderByIdSchema,
+  getAvailableServiceAgentsSchema,
   createOrderSchema,
   updateOrderStatusSchema,
   assignServiceAgentSchema,
@@ -61,6 +63,18 @@ export default async function (fastify: FastifyInstance) {
     },
     (request, reply) => {
       return getOrderById(request as any, reply as any);
+    }
+  );
+
+  // Get available service agents for order assignment
+  fastify.get(
+    '/:id/available-agents',
+    {
+      schema: getAvailableServiceAgentsSchema,
+      preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],
+    },
+    (request, reply) => {
+      return getAvailableServiceAgents(request as any, reply as any);
     }
   );
 

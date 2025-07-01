@@ -140,6 +140,70 @@ export async function getOrderById(id: string) {
   return result;
 }
 
+// Get available service agents for order assignment
+export async function getAvailableServiceAgentsForOrder(orderId: string) {
+  const fastify = getFastifyInstance();
+
+  const order = await getOrderById(orderId);
+  if (!order) {
+    throw notFound('Order');
+  }
+
+  // Get customer to find franchise area
+  const customer = await fastify.db.query.users.findFirst({
+    where: eq(users.id, order.customerId)
+  });
+
+  if (!customer) {
+    throw notFound('Customer');
+  }
+
+  const franchiseAreaId = customer.franchiseAreaId;
+
+  // Get franchise-specific and global service agents
+  let whereConditions;
+  
+  if (franchiseAreaId) {
+    // Get agents from specific franchise area OR global agents (no franchise area assigned)
+    whereConditions = and(
+      eq(users.role, UserRole.SERVICE_AGENT),
+      eq(users.isActive, true),
+      or(
+        eq(users.franchiseAreaId, franchiseAreaId),
+        eq(users.franchiseAreaId, null) // Global agents
+      )
+    );
+  } else {
+    // Only global agents if customer has no franchise area
+    whereConditions = and(
+      eq(users.role, UserRole.SERVICE_AGENT),
+      eq(users.isActive, true),
+      eq(users.franchiseAreaId, null)
+    );
+  }
+
+  const availableAgents = await fastify.db.query.users.findMany({
+    where: whereConditions,
+    with: {
+      franchiseArea: true
+    }
+  });
+
+  // Format the response with additional info
+  return availableAgents.map(agent => ({
+    id: agent.id,
+    name: agent.name,
+    phone: agent.phone,
+    email: agent.email,
+    franchiseAreaId: agent.franchiseAreaId,
+    franchiseAreaName: agent.franchiseArea?.name || 'Global Agent',
+    isGlobalAgent: !agent.franchiseAreaId,
+    createdAt: agent.createdAt,
+    // Add any additional stats if needed
+    activeOrdersCount: 0, // This could be calculated if needed
+    completedOrdersCount: 0 // This could be calculated if needed
+  }));
+}
 
 // Create a new order with user details
 export async function createOrder(data: {
@@ -192,40 +256,6 @@ export async function createOrder(data: {
 
   // Create the order in a transaction
   const createdOrder = await fastify.db.transaction(async (tx) => {
-    //   // Update user details if provided
-    //   if (data.userDetails) {
-    //     const updateData: any = {
-    //       updatedAt: new Date().toISOString()
-    //     };
-
-    //     if (data.userDetails.name) updateData.name = data.userDetails.name;
-    //     if (data.userDetails.email) updateData.email = data.userDetails.email;
-    //     if (data.userDetails.address) updateData.address = data.userDetails.address;
-    //     if (data.userDetails.phone) updateData.phone = data.userDetails.phone;
-    //     if (data.userDetails.alternativePhone) updateData.alternativePhone = data.userDetails.alternativePhone;
-
-    //     // Update location if provided
-    //     if (data.userDetails.latitude && data.userDetails.longitude) {
-    //       updateData.locationLatitude = data.userDetails.latitude;
-    //       updateData.locationLongitude = data.userDetails.longitude;
-
-    //       // Find and assign franchise area based on new location
-    //       const franchiseAreaId = await franchiseService.findFranchiseAreaForLocation({
-    //         latitude: data.userDetails.latitude,
-    //         longitude: data.userDetails.longitude
-    //       });
-
-    //       if (franchiseAreaId) {
-    //         updateData.franchiseAreaId = franchiseAreaId;
-    //       }
-    //     }
-
-    //     await tx
-    //       .update(users)
-    //       .set(updateData)
-    //       .where(eq(users.id, data.customerId));
-    //   }
-
     // Get updated customer info for franchise area
     const updatedCustomer = await tx.query.users.findFirst({
       where: eq(users.id, data.customerId)
@@ -391,17 +421,30 @@ export async function assignServiceAgent(id: string, serviceAgentId: string, use
     throw badRequest('Invalid service agent');
   }
 
-  // Check if assignment is within the same franchise area
+  // Get customer to check franchise area
+  const customer = await userService.getUserById(order.customerId);
+  if (!customer) {
+    throw badRequest('Customer not found');
+  }
+
+  // Check if assignment is valid based on user role and franchise area
   if (user.role === UserRole.FRANCHISE_OWNER) {
-    if (serviceAgent.franchiseAreaId !== user.franchiseAreaId) {
+    // Franchise owner can only assign agents from their area or global agents
+    if (serviceAgent.franchiseAreaId && serviceAgent.franchiseAreaId !== user.franchiseAreaId) {
       throw badRequest('Service agent is not in your franchise area');
     }
 
     // Also check if the order is in this franchise area
-    const customer = await userService.getUserById(order.customerId);
-    if (!customer || customer.franchiseAreaId !== user.franchiseAreaId) {
+    if (customer.franchiseAreaId !== user.franchiseAreaId) {
       throw badRequest('This order is not in your franchise area');
     }
+  }
+
+  // For admin, allow assignment of any agent to any order
+  // For franchise-specific agents, ensure they can serve this customer's area
+  if (serviceAgent.franchiseAreaId && customer.franchiseAreaId && 
+      serviceAgent.franchiseAreaId !== customer.franchiseAreaId) {
+    throw badRequest('Service agent cannot serve this customer\'s franchise area');
   }
 
   // Update the order
@@ -760,8 +803,8 @@ async function createRentalFromOrder(orderId: string) {
   }
 
   const now = new Date();
-  const nextMonth = new Date();
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const threeMonthsLater = new Date();
+  threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3); // Minimum 3 months tenure
 
   // Create rental record
   const rentalId = await await generateId('rent');
@@ -773,7 +816,7 @@ async function createRentalFromOrder(orderId: string) {
     status: RentalStatus.ACTIVE,
     startDate: now.toISOString(),
     currentPeriodStartDate: now.toISOString(),
-    currentPeriodEndDate: nextMonth.toISOString(),
+    currentPeriodEndDate: threeMonthsLater.toISOString(), // 3 months minimum tenure
     monthlyAmount: product.rentPrice,
     depositAmount: product.deposit,
     createdAt: now.toISOString(),
@@ -785,7 +828,7 @@ async function createRentalFromOrder(orderId: string) {
     await notificationService.send(
       order.customerId,
       'Rental Started',
-      `Your rental for ${product.name} has been activated. The first payment period is from ${now.toLocaleDateString()} to ${nextMonth.toLocaleDateString()}.`,
+      `Your rental for ${product.name} has been activated. The minimum tenure period is 3 months, ending on ${threeMonthsLater.toLocaleDateString()}.`,
       NotificationType.STATUS_UPDATE,
       [NotificationChannel.PUSH, NotificationChannel.EMAIL],
       rentalId,
