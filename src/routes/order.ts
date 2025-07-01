@@ -140,9 +140,9 @@ export default async function (fastify: FastifyInstance) {
     }
   );
 
-  // Assign service agent (admin and franchise owner only)
-  fastify.patch(
-    '/:id/assign',
+  // Assign service agent (admin and franchise owner only) - NEW ENDPOINT
+  fastify.post(
+    '/:id/assign-agent',
     {
       schema: assignServiceAgentSchema,
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],

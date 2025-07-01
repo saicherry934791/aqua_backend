@@ -214,7 +214,7 @@ export const updateOrderStatusSchema = {
   security: [{ bearerAuth: [] }],
 };
 
-// Assign Service Agent Schema
+// Assign Service Agent Schema - NEW SCHEMA
 export const AssignServiceAgentParamsSchema = z.object({
   id: z.string(),
 });
@@ -239,7 +239,7 @@ export const assignServiceAgentSchema = {
   },
   tags: ["orders"],
   summary: "Assign service agent to order",
-  description: "Assign a service agent to an order (admin or franchise owner only)",
+  description: "Assign a service agent to an order and update status to ASSIGNED (admin or franchise owner only)",
   security: [{ bearerAuth: [] }],
 };
 
