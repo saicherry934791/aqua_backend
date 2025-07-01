@@ -70,7 +70,7 @@ export async function getOrderById(
   }
 }
 
-// Create a new order
+// Create a new order with optional user details update
 export async function createOrder(
   request: FastifyRequest<{ 
     Body: { 
@@ -107,6 +107,29 @@ export async function createOrder(
     
     if (type === OrderType.RENTAL && !product.isRentable) {
       throw badRequest('This product is not available for rent');
+    }
+    
+    // Validate user details if provided
+    if (userDetails) {
+      if (!userDetails.name || userDetails.name.length < 2) {
+        throw badRequest('Name must be at least 2 characters long');
+      }
+      
+      if (userDetails.phone && !/^\d{10}$/.test(userDetails.phone)) {
+        throw badRequest('Phone number must be 10 digits');
+      }
+      
+      if (userDetails.alternativePhone && !/^\d{10}$/.test(userDetails.alternativePhone)) {
+        throw badRequest('Alternative phone number must be 10 digits');
+      }
+      
+      if (userDetails.latitude && (userDetails.latitude < -90 || userDetails.latitude > 90)) {
+        throw badRequest('Invalid latitude');
+      }
+      
+      if (userDetails.longitude && (userDetails.longitude < -180 || userDetails.longitude > 180)) {
+        throw badRequest('Invalid longitude');
+      }
     }
     
     // Validate installation date if provided
@@ -266,8 +289,7 @@ export async function cancelOrder(
 // Create payment for order
 export async function initiatePayment(
   request: FastifyRequest<{ 
-    Params: { id: string },
-    Body: { paymentType?: string } 
+    Params: { id: string }
   }>,
   reply: FastifyReply
 ) {
