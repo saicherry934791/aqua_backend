@@ -77,6 +77,11 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
       },
     });
   }
+  results.forEach((order) => {
+    if (order.product) {
+      order.product.images = parseJsonSafe<string[]>(order.product.images as any, []);
+    }
+  });
 
   return results;
 }
