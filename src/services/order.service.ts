@@ -52,7 +52,29 @@ export async function getAllOrders(status?: OrderStatus, type?: OrderType, user?
         payments: true,
       },
     });
+  } else if (user && user.role === UserRole.SERVICE_AGENT) {
+    // Service agents can only see orders assigned to them
+    let whereConditions = eq(orders.serviceAgentId, user.userId);
+
+    if (status) {
+      whereConditions = and(whereConditions, eq(orders.status, status));
+    }
+
+    if (type) {
+      whereConditions = and(whereConditions, eq(orders.type, type));
+    }
+
+    results = await fastify.db.query.orders.findMany({
+      where: whereConditions,
+      with: {
+        customer: true,
+        product: true,
+        serviceAgent: true,
+        payments: true,
+      },
+    });
   } else {
+    // Admin can see all orders
     // Build the query based on filters
     let conditions = undefined;
 
