@@ -9,7 +9,7 @@ export async function getDashboardStats(userId: string, role: UserRole, franchis
   
   switch (role) {
     case UserRole.ADMIN:
-      return await getAdminDashboardStats();
+      return await getAdminDashboardStatsInternal();
     case UserRole.FRANCHISE_OWNER:
       return await getFranchiseOwnerDashboardStats(franchiseAreaId);
     case UserRole.SERVICE_AGENT:
@@ -21,7 +21,7 @@ export async function getDashboardStats(userId: string, role: UserRole, franchis
   }
 }
 
-async function getAdminDashboardStats() {
+async function getAdminDashboardStatsInternal() {
   const fastify = getFastifyInstance();
   
   // Get current date ranges
@@ -97,10 +97,10 @@ async function getAdminDashboardStats() {
   }, {} as Record<string, number>);
 
   const orderDistribution = [
-    { name: "Active Orders", population: Math.round((ordersByStatus[OrderStatus.ASSIGNED] || 0) / totalOrders * 100), color: "#007bff" },
-    { name: "Completed", population: Math.round((ordersByStatus[OrderStatus.COMPLETED] || 0) / totalOrders * 100), color: "#10B981" },
-    { name: "Pending", population: Math.round((ordersByStatus[OrderStatus.PAYMENT_PENDING] || 0) / totalOrders * 100), color: "#F59E0B" },
-    { name: "Cancelled", population: Math.round((ordersByStatus[OrderStatus.CANCELLED] || 0) / totalOrders * 100), color: "#EF4444" }
+    { name: "Active Orders", population: Math.round((ordersByStatus[OrderStatus.ASSIGNED] || 0) / Math.max(totalOrders, 1) * 100), color: "#007bff" },
+    { name: "Completed", population: Math.round((ordersByStatus[OrderStatus.COMPLETED] || 0) / Math.max(totalOrders, 1) * 100), color: "#10B981" },
+    { name: "Pending", population: Math.round((ordersByStatus[OrderStatus.PAYMENT_PENDING] || 0) / Math.max(totalOrders, 1) * 100), color: "#F59E0B" },
+    { name: "Cancelled", population: Math.round((ordersByStatus[OrderStatus.CANCELLED] || 0) / Math.max(totalOrders, 1) * 100), color: "#EF4444" }
   ];
 
   // Generate monthly data for trends (last 6 months)
@@ -168,10 +168,10 @@ async function getAdminDashboardStats() {
             { 
               label: "Values", 
               data: [
-                Math.round(purchaseRevenue / totalRevenue * 100),
-                Math.round(serviceRevenue / totalRevenue * 100),
-                Math.round(rentalRevenue / totalRevenue * 100),
-                Math.round(depositRevenue / totalRevenue * 100)
+                Math.round(purchaseRevenue / Math.max(totalRevenue, 1) * 100),
+                Math.round(serviceRevenue / Math.max(totalRevenue, 1) * 100),
+                Math.round(rentalRevenue / Math.max(totalRevenue, 1) * 100),
+                Math.round(depositRevenue / Math.max(totalRevenue, 1) * 100)
               ] 
             }
           ]
@@ -211,7 +211,9 @@ async function getFranchiseOwnerDashboardStats(franchiseAreaId?: string) {
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  // Get franchise-specific data
+  // Get franchise-specific data using proper SQL IN clause
+  const customerIdsStr = customerIds.map(id => `'${id}'`).join(',');
+  
   const [
     franchiseOrders,
     franchisePayments,
@@ -220,12 +222,12 @@ async function getFranchiseOwnerDashboardStats(franchiseAreaId?: string) {
     lastMonthCustomers
   ] = await Promise.all([
     fastify.db.query.orders.findMany({
-      where: sql`${orders.customerId} IN (${customerIds.map(id => `'${id}'`).join(',')})`
+      where: sql`${orders.customerId} IN (${sql.raw(customerIdsStr)})`
     }),
     fastify.db.query.payments.findMany({
       where: and(
         eq(payments.status, PaymentStatus.COMPLETED),
-        sql`${payments.orderId} IN (SELECT id FROM ${orders} WHERE ${orders.customerId} IN (${customerIds.map(id => `'${id}'`).join(',')}))`
+        sql`${payments.orderId} IN (SELECT id FROM ${orders} WHERE ${orders.customerId} IN (${sql.raw(customerIdsStr)}))`
       )
     }),
     fastify.db.query.serviceRequests.findMany({
@@ -271,8 +273,8 @@ async function getFranchiseOwnerDashboardStats(franchiseAreaId?: string) {
   const newCustomersTotal = franchiseCustomers.length - repeatCustomers;
 
   const customerDistribution = [
-    { name: "New Customers", population: Math.round(newCustomersTotal / franchiseCustomers.length * 100), color: "#007bff" },
-    { name: "Repeat Customers", population: Math.round(repeatCustomers / franchiseCustomers.length * 100), color: "#10B981" }
+    { name: "New Customers", population: Math.round(newCustomersTotal / Math.max(franchiseCustomers.length, 1) * 100), color: "#007bff" },
+    { name: "Repeat Customers", population: Math.round(repeatCustomers / Math.max(franchiseCustomers.length, 1) * 100), color: "#10B981" }
   ];
 
   // Generate monthly trends for franchise
@@ -411,9 +413,9 @@ async function getServiceAgentDashboardStats(userId: string) {
 
   const totalTasks = allAgentTasks.length;
   const taskDistribution = [
-    { name: "Completed", population: Math.round(completedTasks / totalTasks * 100), color: "#10B981" },
-    { name: "In Progress", population: Math.round(inProgressTasks / totalTasks * 100), color: "#F59E0B" },
-    { name: "Pending", population: Math.round(pendingTasks / totalTasks * 100), color: "#EF4444" }
+    { name: "Completed", population: Math.round(completedTasks / Math.max(totalTasks, 1) * 100), color: "#10B981" },
+    { name: "In Progress", population: Math.round(inProgressTasks / Math.max(totalTasks, 1) * 100), color: "#F59E0B" },
+    { name: "Pending", population: Math.round(pendingTasks / Math.max(totalTasks, 1) * 100), color: "#EF4444" }
   ];
 
   // Weekly performance (last 7 days)
@@ -603,7 +605,7 @@ function getEmptyFranchiseDashboard() {
   };
 }
 
-// Legacy function for backward compatibility
+// Legacy function for backward compatibility - FIXED to avoid circular dependency
 export async function getAdminDashboardStats(from?: string, to?: string) {
-  return await getDashboardStats('admin', UserRole.ADMIN);
+  return await getAdminDashboardStatsInternal();
 }
