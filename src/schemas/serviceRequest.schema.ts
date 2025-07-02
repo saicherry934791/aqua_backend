@@ -1,10 +1,29 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ErrorResponseSchema, UserSchema } from './auth.schema';
+import { ErrorResponseSchema } from './auth.schema';
 import { ProductSchema } from './product.schema';
 import { ServiceRequestType, ServiceRequestStatus } from '../types';
 
-// Service Request Schema - Updated to handle images properly
+// User Schema for service request relationships - Updated to match actual DB structure
+export const UserInServiceRequestSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  phone: z.string(),
+  email: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  alternativePhone: z.string().nullable().optional(),
+  role: z.string(),
+  franchiseAreaId: z.string().nullable().optional(),
+  locationLatitude: z.number().nullable().optional(),
+  locationLongitude: z.number().nullable().optional(),
+  hasOnboarded: z.boolean().optional(),
+  isActive: z.boolean(),
+  firebaseUid: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+// Service Request Schema - Updated to handle images and assignedTo properly
 export const ServiceRequestSchema = z.object({
   id: z.string(),
   customerId: z.string(),
@@ -20,9 +39,9 @@ export const ServiceRequestSchema = z.object({
   completedDate: z.string().optional().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  customer: UserSchema.optional(),
-  product: ProductSchema.optional(),
-  assignedTo: UserSchema.optional().nullable(),
+  customer: UserInServiceRequestSchema.optional().nullable(),
+  product: ProductSchema.optional().nullable(),
+  assignedTo: UserInServiceRequestSchema.optional().nullable(),
 });
 
 // Create Service Request
