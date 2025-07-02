@@ -116,12 +116,12 @@ export default async function (fastify: FastifyInstance) {
 
   // Admin, franchise owner, and service agent routes
   
-  // Get all orders (admin and franchise owner only)
+  // Get all orders (admin, franchise owner, and service agent can see their assigned orders)
   fastify.get(
     '/',
     {
       schema: getAllOrdersSchema,
-      preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],
+      preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER, UserRole.SERVICE_AGENT])],
     },
     (request, reply) => {
       return getAllOrders(request as any, reply as any);
