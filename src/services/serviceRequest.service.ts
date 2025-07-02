@@ -212,3 +212,62 @@ export async function assignServiceAgent(id: string, assignedToId: string, user:
 
   return await getServiceRequestById(id);
 }
+
+// Schedule service request - NEW FUNCTION
+export async function scheduleServiceRequest(id: string, scheduledDate: string, user: any) {
+  const fastify = getFastifyInstance();
+  const sr = await getServiceRequestById(id);
+  if (!sr) throw notFound('Service Request');
+
+  // Permission: admin, franchise owner, or assigned agent
+  const hasPermission =
+    user.role === UserRole.ADMIN ||
+    (user.role === UserRole.FRANCHISE_OWNER && sr.franchiseAreaId === user.franchiseAreaId) ||
+    (user.role === UserRole.SERVICE_AGENT && sr.assignedToId === user.userId);
+  if (!hasPermission) throw forbidden('You do not have permission to schedule this service request');
+
+  // Validate scheduled date is in the future
+  const scheduledDateTime = new Date(scheduledDate);
+  if (scheduledDateTime <= new Date()) {
+    throw badRequest('Scheduled date must be in the future');
+  }
+
+  await fastify.db.update(serviceRequests).set({
+    scheduledDate: scheduledDateTime.toISOString(),
+    updatedAt: new Date().toISOString(),
+  }).where(eq(serviceRequests.id, id));
+
+  // Send notification to customer
+  try {
+    await notificationService.send(
+      sr.customerId,
+      'Service Scheduled',
+      `Your service request has been scheduled for ${scheduledDateTime.toLocaleDateString()}.`,
+      NotificationType.STATUS_UPDATE,
+      [NotificationChannel.PUSH, NotificationChannel.EMAIL],
+      id,
+      'service_request'
+    );
+  } catch (error) {
+    fastify.log.error(`Failed to send notification: ${error}`);
+  }
+
+  // If there's an assigned agent, notify them too
+  if (sr.assignedToId) {
+    try {
+      await notificationService.send(
+        sr.assignedToId,
+        'Service Scheduled',
+        `A service request has been scheduled for ${scheduledDateTime.toLocaleDateString()}.`,
+        NotificationType.STATUS_UPDATE,
+        [NotificationChannel.PUSH, NotificationChannel.EMAIL],
+        id,
+        'service_request'
+      );
+    } catch (error) {
+      fastify.log.error(`Failed to send notification: ${error}`);
+    }
+  }
+
+  return await getServiceRequestById(id);
+}

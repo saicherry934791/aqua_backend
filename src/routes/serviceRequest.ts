@@ -5,6 +5,7 @@ import {
   createServiceRequest,
   updateServiceRequestStatus,
   assignServiceAgent,
+  scheduleServiceRequest,
 } from '../controllers/serviceRequest.controller';
 import {
   getAllServiceRequestsSchema,
@@ -12,6 +13,7 @@ import {
   createServiceRequestSchema,
   updateServiceRequestStatusSchema,
   assignServiceAgentSchema,
+  scheduleServiceRequestSchema,
 } from '../schemas/serviceRequest.schema';
 import { UserRole } from '../types';
 
@@ -104,6 +106,16 @@ export default async function (fastify: FastifyInstance) {
       preHandler: [fastify.authorizeRoles([UserRole.ADMIN, UserRole.FRANCHISE_OWNER])],
     },
     (request, reply) => assignServiceAgent(request as any, reply as any)
+  );
+
+  // Schedule service request - NEW ENDPOINT
+  fastify.patch(
+    '/:id/schedule',
+    {
+      schema: scheduleServiceRequestSchema,
+      preHandler: [fastify.authenticate],
+    },
+    (request, reply) => scheduleServiceRequest(request as any, reply as any)
   );
 
   fastify.log.info('Service Request routes registered');

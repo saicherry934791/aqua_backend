@@ -128,3 +128,20 @@ export async function assignServiceAgent(
     handleError(error, request, reply);
   }
 }
+
+// Schedule service request - NEW FUNCTION
+export async function scheduleServiceRequest(
+  request: FastifyRequest<{ Params: { id: string }; Body: { scheduledDate: string } }>,
+  reply: FastifyReply
+) {
+  try {
+    const { id } = request.params;
+    const { scheduledDate } = request.body;
+    const user = request.user;
+    
+    const sr = await serviceRequestService.scheduleServiceRequest(id, scheduledDate, user);
+    return reply.code(200).send({ message: 'Service request scheduled', serviceRequest: sr });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}

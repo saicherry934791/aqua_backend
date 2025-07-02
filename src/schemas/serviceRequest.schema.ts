@@ -163,3 +163,29 @@ export const assignServiceAgentSchema = {
   description: "Assign a service agent to a service request (admin or franchise owner only)",
   security: [{ bearerAuth: [] }],
 };
+
+// Schedule Service Request - NEW SCHEMA
+export const ScheduleServiceRequestParamsSchema = z.object({
+  id: z.string(),
+});
+export const ScheduleServiceRequestBodySchema = z.object({
+  scheduledDate: z.string(),
+});
+export const ScheduleServiceRequestResponseSchema = z.object({
+  message: z.string(),
+  serviceRequest: ServiceRequestSchema,
+});
+export const scheduleServiceRequestSchema = {
+  params: zodToJsonSchema(ScheduleServiceRequestParamsSchema),
+  body: zodToJsonSchema(ScheduleServiceRequestBodySchema),
+  response: {
+    200: zodToJsonSchema(ScheduleServiceRequestResponseSchema),
+    400: zodToJsonSchema(ErrorResponseSchema),
+    403: zodToJsonSchema(ErrorResponseSchema),
+    404: zodToJsonSchema(ErrorResponseSchema),
+  },
+  tags: ["service-requests"],
+  summary: "Schedule service request",
+  description: "Schedule a service request for a specific date and time (admin, franchise owner, or assigned agent)",
+  security: [{ bearerAuth: [] }],
+};
