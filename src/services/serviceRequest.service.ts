@@ -185,7 +185,7 @@ export async function assignServiceAgent(id: string, assignedToId: string, user:
 
   // Check if agent exists and is in the same franchise area
   const agent = await fastify.db.query.users.findFirst({ where: eq(users.id, assignedToId) });
-  if (!agent || agent.role !== UserRole.SERVICE_AGENT || agent.franchiseAreaId !== sr.franchiseAreaId) {
+  if (!agent || agent.role !== UserRole.SERVICE_AGENT ) {
     throw badRequest('Invalid service agent for this franchise area');
   }
 
