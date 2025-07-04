@@ -10,5 +10,7 @@ node_modules
 
 .idea
 
-*db*
+*.db*
 drizzle/
+
+dist
