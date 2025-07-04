@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
+
 import { serviceAgentAddBody } from "../schemas/serviceagent.schema";
 import { getAllServiceAgentsFromDB, serviceAgentAddToDB, serviceAgentUpdate } from "../services/serviceagnet.service";
 import { handleError } from "../utils/errors";

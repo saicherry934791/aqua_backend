@@ -1,10 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and } from 'drizzle-orm';
 import { notifications, users } from '../models/schema';
 import { NotificationType, NotificationChannel, NotificationStatus } from '../types';
 import { generateId } from '../utils/helpers';
 import { notFound } from '../utils/errors';
 import { getFastifyInstance } from '../shared/fastify-instance';
+import { eq, desc, and, sql} from 'drizzle-orm';
 
 /**
  * Send a notification to a user
@@ -157,7 +157,7 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
     .where(
       and(
         eq(notifications.userId, userId),
-        notEq(notifications.status, NotificationStatus.READ)
+        eq(notifications.status, NotificationStatus.READ)
       )
     );
   

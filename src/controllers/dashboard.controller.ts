@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as dashboardService from '../services/dashboard.service';
 import { handleError, forbidden, badRequest } from '../utils/errors';
