@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, sql } from 'drizzle-orm';
 import { type franchiseArea, franchiseAreas, User, users } from '../models/schema';
 import { GeoLocation, GeoPolygon, UserRole } from '../types';
 import { isPointInPolygon, parseJsonSafe, generateId, normalizePolygonCoordinates } from '../utils/helpers';

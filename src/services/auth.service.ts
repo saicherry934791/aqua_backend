@@ -232,7 +232,7 @@ export async function checkRole(phoneNumber: string, role: UserRole) {
     console.log('samplecall ', samplecall)
     const user = await db.query.users.findFirst({
       where: and(
-        eq(users.phone, phoneNumber),
+        eq(users.phone,`+91`+phoneNumber),
         eq(users.role, role)
       )
     })

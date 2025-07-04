@@ -13,7 +13,7 @@ export async function getAllOrders(
     const { status, type } = request.query;
     
     // Only admins and franchise owners can see all orders
-    if (![UserRole.ADMIN, UserRole.FRANCHISE_OWNER].includes(request.user.role)) {
+    if (![UserRole.ADMIN, UserRole.FRANCHISE_OWNER,UserRole.SERVICE_AGENT].includes(request.user.role)) {
       throw forbidden('You are not authorized to view all orders');
     }
     

@@ -30,12 +30,15 @@ export async function getServiceRequestById(
     const user = request.user;
     const sr = await serviceRequestService.getServiceRequestById(id);
     if (!sr) throw notFound('Service Request');
+
+    console.log('service request ',sr)
+    console.log('user is ',user)
     // Permission: admin, franchise owner (same area), assigned agent, or customer
     const hasPermission =
       user.role === UserRole.ADMIN ||
       (user.role === UserRole.FRANCHISE_OWNER && sr.franchiseAreaId === user.franchiseAreaId) ||
-      (user.role === UserRole.SERVICE_AGENT && sr.assignedToId === user.id) ||
-      (user.role === UserRole.CUSTOMER && sr.customerId === user.id);
+      (user.role === UserRole.SERVICE_AGENT && sr.assignedToId === user.userId) ||
+      (user.role === UserRole.CUSTOMER && sr.customerId === user.userId);
     if (!hasPermission) throw forbidden('You do not have permission to view this service request');
     return reply.code(200).send({ serviceRequest: sr });
   } catch (error) {

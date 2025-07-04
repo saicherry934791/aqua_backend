@@ -90,11 +90,15 @@ export async function createServiceRequest(data: any, user: any) {
   const product = await fastify.db.query.products.findFirst({ where: eq(products.id, data.productId) });
   if (!product) throw notFound('Product');
 
-  let franchiseAreaId = user.franchiseAreaId;
-  if (!franchiseAreaId) {
-    // Try to get from product or order if needed
-    throw badRequest('Franchise area not found for user');
-  }
+  // let franchiseAreaId = user.franchiseAreaId;
+  // if (!franchiseAreaId) {
+  //   // Try to get from product or order if needed
+  //   throw badRequest('Franchise area not found for user');
+  // }
+  const userFromDb = await fastify.db.query.users.findFirst({
+    where: eq(users.id,user.userId)
+  })
+  console.log('userFromDb ',userFromDb)
 
   const serviceRequest = {
     id,
@@ -106,7 +110,7 @@ export async function createServiceRequest(data: any, user: any) {
     images: data.images && data.images.length > 0 ? JSON.stringify(data.images) : null, // Store images as JSON
     status: ServiceRequestStatus.CREATED,
     assignedToId: null,
-    franchiseAreaId,
+    franchiseAreaId:userFromDb.franchiseAreaId,
     scheduledDate: data.scheduledDate || null,
     completedDate: null,
     createdAt: now,
