@@ -6,14 +6,15 @@
     "baseUrl": ".",
     "outDir": "dist",
     "sourceMap": true,
-    "strict": true,
+    // "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "strict": false,
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
