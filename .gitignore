@@ -14,3 +14,7 @@ node_modules
 drizzle/
 
 dist
+
+android
+
+src/config/service-account.json
