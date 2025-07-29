@@ -92,6 +92,38 @@ export enum NotificationStatus {
   READ = 'read',
 }
 
+export enum InstallationRequestStatus {
+  CREATED = 'created',
+  UNDER_REVIEW = 'under_review',
+  CONTACTING_CUSTOMER = 'contacting_customer',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  CONNECT_ID_ISSUED = 'connect_id_issued',
+  INSTALLATION_SCHEDULED = 'installation_scheduled',
+  INSTALLATION_IN_PROGRESS = 'installation_in_progress',
+  INSTALLATION_COMPLETED = 'installation_completed',
+  ACTIVE = 'active',
+}
+
+export enum PurifierConnectionStatus {
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  TERMINATED = 'terminated',
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = 'active',
+  PAYMENT_DUE = 'payment_due',
+  SUSPENDED = 'suspended',
+  TERMINATED = 'terminated',
+}
+
+export enum ServicePaymentStatus {
+  NOT_REQUIRED = 'not_required',
+  REQUIRED = 'required',
+  COMPLETED = 'completed',
+}
+
 export interface User {
   id: string;
   phone: string;
@@ -107,6 +139,54 @@ export interface User {
   updatedAt: Date;
   isActive: boolean;
   firebaseUid?: string;
+}
+
+export interface InstallationRequest {
+  id: string;
+  customerId: string;
+  productId: string;
+  customerName: string;
+  customerPhone: string;
+  city: string;
+  franchiseAreaId: string;
+  installationAddress: string;
+  locationLatitude: number;
+  locationLongitude: number;
+  status: InstallationRequestStatus;
+  notes?: string;
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  connectId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PurifierConnection {
+  id: string;
+  connectId: string;
+  customerId: string;
+  productId: string;
+  installationRequestId: string;
+  franchiseAreaId: string;
+  status: PurifierConnectionStatus;
+  planName: string;
+  planType: 'rental' | 'purchase';
+  startDate: Date;
+  endDate?: Date;
+  nextPaymentDate?: Date;
+  monthlyAmount?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EnhancedServiceRequest extends ServiceRequest {
+  beforeImages?: string[];
+  afterImages?: string[];
+  paymentRequired: boolean;
+  paymentAmount?: number;
+  paymentProofImage?: string;
+  paymentStatus: ServicePaymentStatus;
+  serviceNotes?: string;
 }
 
 export interface FranchiseArea {
@@ -223,6 +303,7 @@ export interface JwtPayload {
   userId: string;
   role: UserRole;
   franchiseAreaId?: string;
+  connectId?: string;
   iat?: number;
   exp?: number;
 }

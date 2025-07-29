@@ -15,6 +15,10 @@ import {
   NotificationType,
   NotificationChannel,
   NotificationStatus,
+  InstallationRequestStatus,
+  PurifierConnectionStatus,
+  SubscriptionStatus,
+  ServicePaymentStatus,
 } from "../types";
 
 /* FranchiseAreas must be declared first due to reference in users */
@@ -150,20 +154,84 @@ export const rentals = sqliteTable("rentals", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
+/* Installation Requests */
+export const installationRequests = sqliteTable("installation_requests", {
+  id: text("id").primaryKey(),
+  customerId: text("customer_id").notNull().references(() => users.id),
+  productId: text("product_id").notNull().references(() => products.id),
+  customerName: text("customer_name").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  city: text("city").notNull(),
+  franchiseAreaId: text("franchise_area_id").notNull().references(() => franchiseAreas.id),
+  installationAddress: text("installation_address").notNull(),
+  locationLatitude: real("location_latitude").notNull(),
+  locationLongitude: real("location_longitude").notNull(),
+  status: text("status", { enum: Object.values(InstallationRequestStatus) }).notNull().default(InstallationRequestStatus.CREATED),
+  notes: text("notes"),
+  reviewedBy: text("reviewed_by").references(() => users.id),
+  reviewedAt: text("reviewed_at"),
+  connectId: text("connect_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+/* Purifier Connections */
+export const purifierConnections = sqliteTable("purifier_connections", {
+  id: text("id").primaryKey(),
+  connectId: text("connect_id").notNull().unique(),
+  customerId: text("customer_id").notNull().references(() => users.id),
+  productId: text("product_id").notNull().references(() => products.id),
+  installationRequestId: text("installation_request_id").notNull().references(() => installationRequests.id),
+  franchiseAreaId: text("franchise_area_id").notNull().references(() => franchiseAreas.id),
+  status: text("status", { enum: Object.values(PurifierConnectionStatus) }).notNull().default(PurifierConnectionStatus.ACTIVE),
+  planName: text("plan_name").notNull(),
+  planType: text("plan_type", { enum: ["rental", "purchase"] }).notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date"),
+  nextPaymentDate: text("next_payment_date"),
+  monthlyAmount: integer("monthly_amount"),
+  razorpaySubscriptionId: text("razorpay_subscription_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
 /* Service Requests - Updated to include images field */
 export const serviceRequests = sqliteTable("service_requests", {
   id: text("id").primaryKey(),
   customerId: text("customer_id").notNull().references(() => users.id),
   productId: text("product_id").notNull().references(() => products.id),
   orderId: text("order_id").references(() => orders.id),
+  purifierConnectionId: text("purifier_connection_id").references(() => purifierConnections.id),
   type: text("type", { enum: Object.values(ServiceRequestType) }).notNull(),
   description: text("description").notNull(),
   images: text("images"), // JSON string array for uploaded images
+  beforeImages: text("before_images"), // JSON string array for before service images
+  afterImages: text("after_images"), // JSON string array for after service images
   status: text("status", { enum: Object.values(ServiceRequestStatus) }).notNull().default(ServiceRequestStatus.CREATED),
   assignedToId: text("assigned_to_id").references(() => users.id),
   franchiseAreaId: text("franchise_area_id").notNull().references(() => franchiseAreas.id),
   scheduledDate: text("scheduled_date"),
   completedDate: text("completed_date"),
+  paymentRequired: integer("payment_required", { mode: "boolean" }).notNull().default(false),
+  paymentAmount: integer("payment_amount"),
+  paymentProofImage: text("payment_proof_image"),
+  paymentStatus: text("payment_status", { enum: Object.values(ServicePaymentStatus) }).notNull().default(ServicePaymentStatus.NOT_REQUIRED),
+  serviceNotes: text("service_notes"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+/* Subscription Payments */
+export const subscriptionPayments = sqliteTable("subscription_payments", {
+  id: text("id").primaryKey(),
+  purifierConnectionId: text("purifier_connection_id").notNull().references(() => purifierConnections.id),
+  amount: integer("amount").notNull(),
+  dueDate: text("due_date").notNull(),
+  paidDate: text("paid_date"),
+  status: text("status", { enum: Object.values(PaymentStatus) }).notNull().default(PaymentStatus.PENDING),
+  razorpayPaymentId: text("razorpay_payment_id"),
+  razorpayOrderId: text("razorpay_order_id"),
+  paymentMethod: text("payment_method"), // 'autopay', 'manual', 'offline'
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
@@ -220,8 +288,50 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   rentals: many(rentals),
   serviceRequests: many(serviceRequests, { relationName: "customerServiceRequests" }),
   assignedServiceRequests: many(serviceRequests, { relationName: "agentServiceRequests" }),
+  installationRequests: many(installationRequests),
+  purifierConnections: many(purifierConnections),
   notifications: many(notifications),
   pushSubscriptions: many(pushSubscriptions),
+}));
+
+export const installationRequestRelations = relations(installationRequests, ({ one }) => ({
+  customer: one(users, {
+    fields: [installationRequests.customerId],
+    references: [users.id],
+  }),
+  product: one(products, {
+    fields: [installationRequests.productId],
+    references: [products.id],
+  }),
+  franchiseArea: one(franchiseAreas, {
+    fields: [installationRequests.franchiseAreaId],
+    references: [franchiseAreas.id],
+  }),
+  reviewedByUser: one(users, {
+    fields: [installationRequests.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
+export const purifierConnectionRelations = relations(purifierConnections, ({ one, many }) => ({
+  customer: one(users, {
+    fields: [purifierConnections.customerId],
+    references: [users.id],
+  }),
+  product: one(products, {
+    fields: [purifierConnections.productId],
+    references: [products.id],
+  }),
+  installationRequest: one(installationRequests, {
+    fields: [purifierConnections.installationRequestId],
+    references: [installationRequests.id],
+  }),
+  franchiseArea: one(franchiseAreas, {
+    fields: [purifierConnections.franchiseAreaId],
+    references: [franchiseAreas.id],
+  }),
+  serviceRequests: many(serviceRequests),
+  subscriptionPayments: many(subscriptionPayments),
 }));
 
 export const franchiseAreaRelations = relations(franchiseAreas, ({ many, one }) => ({
@@ -293,9 +403,20 @@ export const serviceRequestRelations = relations(serviceRequests, ({ one }) => (
     fields: [serviceRequests.orderId],
     references: [orders.id],
   }),
+  purifierConnection: one(purifierConnections, {
+    fields: [serviceRequests.purifierConnectionId],
+    references: [purifierConnections.id],
+  }),
   franchiseArea: one(franchiseAreas, {
     fields: [serviceRequests.franchiseAreaId],
     references: [franchiseAreas.id],
+  }),
+}));
+
+export const subscriptionPaymentRelations = relations(subscriptionPayments, ({ one }) => ({
+  purifierConnection: one(purifierConnections, {
+    fields: [subscriptionPayments.purifierConnectionId],
+    references: [purifierConnections.id],
   }),
 }));
 
@@ -315,3 +436,6 @@ export const pushSubscriptionRelations = relations(pushSubscriptions, ({ one }) 
 
 export type franchiseArea = InferSelectModel<typeof franchiseAreas>;
 export type User = InferSelectModel<typeof users>;
+export type InstallationRequest = InferSelectModel<typeof installationRequests>;
+export type PurifierConnection = InferSelectModel<typeof purifierConnections>;
+export type SubscriptionPayment = InferSelectModel<typeof subscriptionPayments>;

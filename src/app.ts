@@ -26,6 +26,8 @@ import notificationRoutes from './routes/notification';
 import dashboardRoutes from './routes/dashboard';
 import serviceAgentRoutes from './routes/serviceagent';
 import homescreenRoutes from './routes/homescreen';
+import installationRequestRoutes from './routes/installationRequest';
+import purifierDashboardRoutes from './routes/purifierDashboard';
 import multipart, { ajvFilePlugin } from '@fastify/multipart';
 
 // Load environment variables
@@ -122,6 +124,8 @@ app.register(notificationRoutes, { prefix: '/api/notifications' });
 app.register(dashboardRoutes, { prefix: '/api/dashboard' });
 app.register(serviceAgentRoutes, { prefix: '/api/agents' });
 app.register(homescreenRoutes, { prefix: '/api/homescreen' });
+app.register(installationRequestRoutes, { prefix: '/api/installation-requests' });
+app.register(purifierDashboardRoutes, { prefix: '/api/purifier-dashboard' });
 
 // Add health check route
 app.get('/health', {
