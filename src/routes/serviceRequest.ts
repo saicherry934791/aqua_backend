@@ -47,9 +47,10 @@ export default async function (fastify: FastifyInstance) {
         consumes: ['multipart/form-data'],
         body: {
           type: 'object',
-          required: ['productId', 'type', 'description'],
+          required: ['type', 'description'],
           properties: {
             productId: { type: 'string' },
+            purifierConnectionId: { type: 'string' },
             orderId: { type: 'string' },
             type: { type: 'string' },
             description: { type: 'string' },
@@ -88,6 +89,147 @@ export default async function (fastify: FastifyInstance) {
     (request, reply) => createServiceRequest(request as any, reply as any)
   );
 
+  // Accept service request (for agents)
+  fastify.post(
+    '/:id/accept',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Accept service request",
+        security: [{ bearerAuth: [] }]
+      },
+      preHandler: [fastify.authorizeRoles([UserRole.SERVICE_AGENT])]
+    },
+    async (request: any, reply: any) => {
+      const { id } = request.params;
+      const agentId = request.user.userId;
+      
+      const serviceRequest = await serviceRequestService.acceptServiceRequest(id, agentId);
+      
+      return reply.code(200).send({
+        message: 'Service request accepted successfully',
+        serviceRequest
+      });
+    }
+  );
+
+  // Complete service request with images
+  fastify.post(
+    '/:id/complete',
+    {
+      schema: {
+        consumes: ['multipart/form-data'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            serviceNotes: { type: 'string' },
+            paymentRequired: { type: 'string', enum: ['true', 'false'] },
+            paymentAmount: { type: 'string' },
+            beforeImages: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' }
+            },
+            afterImages: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' }
+            },
+            paymentProofImage: { type: 'string', format: 'binary' }
+          }
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Complete service request with images",
+        security: [{ bearerAuth: [] }]
+      },
+      preHandler: [fastify.authorizeRoles([UserRole.SERVICE_AGENT])],
+      validatorCompiler: () => () => true
+    },
+    async (request: any, reply: any) => {
+      const { id } = request.params;
+      const agentId = request.user.userId;
+      
+      // Handle form-data parsing
+      const parts = request.parts();
+      const fields: Record<string, any> = {};
+      const beforeImages: string[] = [];
+      const afterImages: string[] = [];
+      let paymentProofImage: string | undefined;
+
+      for await (const part of parts) {
+        if (part.file) {
+          const filename = `service-completion/${Date.now()}-${part.filename}`;
+          const chunks: Buffer[] = [];
+          for await (const chunk of part.file) {
+            chunks.push(chunk);
+          }
+          const buffer = Buffer.concat(chunks);
+          
+          if (request.server.uploadToS3) {
+            const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+            
+            if (part.fieldname === 'beforeImages') {
+              beforeImages.push(uploadedUrl);
+            } else if (part.fieldname === 'afterImages') {
+              afterImages.push(uploadedUrl);
+            } else if (part.fieldname === 'paymentProofImage') {
+              paymentProofImage = uploadedUrl;
+            }
+          }
+        } else {
+          fields[part.fieldname] = part.value;
+        }
+      }
+
+      const completionData = {
+        beforeImages,
+        afterImages,
+        serviceNotes: fields.serviceNotes,
+        paymentRequired: fields.paymentRequired === 'true',
+        paymentAmount: fields.paymentAmount ? Number(fields.paymentAmount) : undefined,
+        paymentProofImage
+      };
+
+      const serviceRequest = await serviceRequestService.completeServiceRequest(
+        id,
+        agentId,
+        completionData
+      );
+      
+      return reply.code(200).send({
+        message: 'Service request completed successfully',
+        serviceRequest
+      });
+    }
+  );
   // Update service request status
   fastify.patch(
     '/:id/status',

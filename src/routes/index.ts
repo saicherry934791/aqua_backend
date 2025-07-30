@@ -1,9 +1,11 @@
 export { default as dashboardRoutes } from './dashboard';
 export { default as userRoutes } from './user';
-export { default as rentalRoutes } from './rental';
 export { default as serviceRequestRoutes } from './serviceRequest';
 export { default as franchiseRoutes } from './franchise';
 export { default as notificationRoutes } from './notification';
-export { default as orderRoutes } from './order';
 export { default as productRoutes } from './product';
-export { default as authRoutes } from './auth'; 
+export { default as authRoutes } from './auth';
+export { default as installationRequestRoutes } from './installationRequest';
+export { default as purifierDashboardRoutes } from './purifierDashboard';
+export { default as subscriptionRoutes } from './subscription';
+export { default as reportsRoutes } from './reports';

@@ -18,8 +18,6 @@ import whatsappPlugin from './plugins/whatsapp';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import productRoutes from './routes/product';
-import orderRoutes from './routes/order';
-import rentalRoutes from './routes/rental';
 import serviceRequestRoutes from './routes/serviceRequest';
 import franchiseRoutes from './routes/franchise';
 import notificationRoutes from './routes/notification';
@@ -28,6 +26,8 @@ import serviceAgentRoutes from './routes/serviceagent';
 import homescreenRoutes from './routes/homescreen';
 import installationRequestRoutes from './routes/installationRequest';
 import purifierDashboardRoutes from './routes/purifierDashboard';
+import subscriptionRoutes from './routes/subscription';
+import reportsRoutes from './routes/reports';
 import multipart, { ajvFilePlugin } from '@fastify/multipart';
 
 // Load environment variables
@@ -116,8 +116,6 @@ app.register(swaggerUi, {
 app.register(authRoutes, { prefix: '/api/auth' });
 app.register(userRoutes, { prefix: '/api/users' });
 app.register(productRoutes, { prefix: '/api/products' });
-app.register(orderRoutes, { prefix: '/api/orders' });
-app.register(rentalRoutes, { prefix: '/api/rentals' });
 app.register(serviceRequestRoutes, { prefix: '/api/service-requests' });
 app.register(franchiseRoutes, { prefix: '/api/franchises' });
 app.register(notificationRoutes, { prefix: '/api/notifications' });
@@ -126,6 +124,8 @@ app.register(serviceAgentRoutes, { prefix: '/api/agents' });
 app.register(homescreenRoutes, { prefix: '/api/homescreen' });
 app.register(installationRequestRoutes, { prefix: '/api/installation-requests' });
 app.register(purifierDashboardRoutes, { prefix: '/api/purifier-dashboard' });
+app.register(subscriptionRoutes, { prefix: '/api/subscriptions' });
+app.register(reportsRoutes, { prefix: '/api/reports' });
 
 // Add health check route
 app.get('/health', {

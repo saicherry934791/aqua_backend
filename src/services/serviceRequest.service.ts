@@ -7,6 +7,186 @@ import { generateId, parseJsonSafe } from '../utils/helpers';
 import { notFound, badRequest, forbidden } from '../utils/errors';
 import { getFastifyInstance } from '../shared/fastify-instance';
 
+// Enhanced service request creation with image handling
+export async function createEnhancedServiceRequest(data: {
+  customerId: string;
+  productId?: string;
+  purifierConnectionId?: string;
+  type: ServiceRequestType;
+  description: string;
+  images?: string[];
+  franchiseAreaId: string;
+}) {
+  const fastify = getFastifyInstance();
+  const id = await generateId('srq');
+  const now = new Date().toISOString();
+
+  const serviceRequest = {
+    id,
+    customerId: data.customerId,
+    productId: data.productId || null,
+    purifierConnectionId: data.purifierConnectionId || null,
+    type: data.type,
+    description: data.description,
+    images: data.images && data.images.length > 0 ? JSON.stringify(data.images) : null,
+    status: ServiceRequestStatus.CREATED,
+    assignedToId: null,
+    franchiseAreaId: data.franchiseAreaId,
+    paymentRequired: false,
+    paymentStatus: 'not_required',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await fastify.db.insert(serviceRequests).values(serviceRequest);
+
+  // Notify franchise agents
+  await notifyFranchiseAgents(data.franchiseAreaId, id);
+
+  return await getServiceRequestById(id);
+}
+
+// Accept service request by agent
+export async function acceptServiceRequest(serviceRequestId: string, agentId: string) {
+  const fastify = getFastifyInstance();
+
+  const serviceRequest = await getServiceRequestById(serviceRequestId);
+  if (!serviceRequest) {
+    throw notFound('Service Request');
+  }
+
+  if (serviceRequest.status !== ServiceRequestStatus.CREATED) {
+    throw badRequest('Service request is no longer available for acceptance');
+  }
+
+  await fastify.db
+    .update(serviceRequests)
+    .set({
+      assignedToId: agentId,
+      status: ServiceRequestStatus.ASSIGNED,
+      updatedAt: new Date().toISOString()
+    })
+    .where(eq(serviceRequests.id, serviceRequestId));
+
+  // Notify customer
+  try {
+    await notificationService.send(
+      serviceRequest.customerId,
+      'Service Agent Assigned',
+      'A service agent has accepted your request and will contact you soon.',
+      NotificationType.ASSIGNMENT_NOTIFICATION,
+      [NotificationChannel.PUSH, NotificationChannel.EMAIL],
+      serviceRequestId,
+      'service_request'
+    );
+  } catch (error) {
+    fastify.log.error('Failed to send notification:', error);
+  }
+
+  return await getServiceRequestById(serviceRequestId);
+}
+
+// Complete service with images and payment
+export async function completeServiceRequest(
+  serviceRequestId: string,
+  agentId: string,
+  completionData: {
+    beforeImages?: string[];
+    afterImages?: string[];
+    serviceNotes?: string;
+    paymentRequired?: boolean;
+    paymentAmount?: number;
+    paymentProofImage?: string;
+  }
+) {
+  const fastify = getFastifyInstance();
+
+  const serviceRequest = await getServiceRequestById(serviceRequestId);
+  if (!serviceRequest) {
+    throw notFound('Service Request');
+  }
+
+  if (serviceRequest.assignedToId !== agentId) {
+    throw forbidden('You are not assigned to this service request');
+  }
+
+  const updateData: any = {
+    status: ServiceRequestStatus.COMPLETED,
+    completedDate: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (completionData.beforeImages?.length) {
+    updateData.beforeImages = JSON.stringify(completionData.beforeImages);
+  }
+  if (completionData.afterImages?.length) {
+    updateData.afterImages = JSON.stringify(completionData.afterImages);
+  }
+  if (completionData.serviceNotes) {
+    updateData.serviceNotes = completionData.serviceNotes;
+  }
+  if (completionData.paymentRequired) {
+    updateData.paymentRequired = true;
+    updateData.paymentAmount = completionData.paymentAmount || 0;
+    updateData.paymentStatus = completionData.paymentProofImage ? 'completed' : 'required';
+    if (completionData.paymentProofImage) {
+      updateData.paymentProofImage = completionData.paymentProofImage;
+    }
+  }
+
+  await fastify.db
+    .update(serviceRequests)
+    .set(updateData)
+    .where(eq(serviceRequests.id, serviceRequestId));
+
+  // Notify customer
+  try {
+    await notificationService.send(
+      serviceRequest.customerId,
+      'Service Completed',
+      'Your service request has been completed successfully.',
+      NotificationType.STATUS_UPDATE,
+      [NotificationChannel.PUSH, NotificationChannel.EMAIL],
+      serviceRequestId,
+      'service_request'
+    );
+  } catch (error) {
+    fastify.log.error('Failed to send notification:', error);
+  }
+
+  return await getServiceRequestById(serviceRequestId);
+}
+
+// Notify franchise agents about new service request
+async function notifyFranchiseAgents(franchiseAreaId: string, serviceRequestId: string) {
+  const fastify = getFastifyInstance();
+
+  // Get all agents in the franchise area
+  const agents = await fastify.db.query.users.findMany({
+    where: and(
+      eq(users.franchiseAreaId, franchiseAreaId),
+      eq(users.role, UserRole.SERVICE_AGENT),
+      eq(users.isActive, true)
+    )
+  });
+
+  // Send notifications to all agents
+  for (const agent of agents) {
+    try {
+      await notificationService.send(
+        agent.id,
+        'New Service Request Available',
+        'A new service request is available in your area. Check the app to accept it.',
+        NotificationType.SERVICE_REQUEST,
+        [NotificationChannel.PUSH],
+        serviceRequestId,
+        'service_request'
+      );
+    } catch (error) {
+      fastify.log.error(`Failed to notify agent ${agent.id}:`, error);
+    }
+  }
+}
 // Get all service requests (with optional filters)
 export async function getAllServiceRequests(filters: any, user: any) {
   const fastify = getFastifyInstance();

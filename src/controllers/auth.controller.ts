@@ -88,7 +88,14 @@ export async function refreshToken(
     const { refreshToken } = request.body;
     const result = await authService.refreshAccessToken(refreshToken);
 
-    return reply.code(200).send(result);
+    // Get user data for refresh token response
+    const decoded = request.server.jwt.verify(refreshToken) as any;
+    const user = await userService.getUserById(decoded.userId);
+    
+    return reply.code(200).send({
+      ...result,
+      user
+    });
   } catch (error) {
     handleError(error, request, reply);
   }

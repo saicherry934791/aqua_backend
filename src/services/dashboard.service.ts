@@ -2,8 +2,8 @@
 // @ts-nocheck
 import { FastifyInstance } from 'fastify';
 import { eq, and, gte, lte, sql, count, sum, desc } from 'drizzle-orm';
-import { users, franchiseAreas, products, orders, rentals, serviceRequests, payments } from '../models/schema';
-import { UserRole, RentalStatus, OrderType, OrderStatus, PaymentStatus, PaymentType, ServiceRequestStatus } from '../types';
+import { users, franchiseAreas, products, serviceRequests, subscriptionPayments, purifierConnections, installationRequests } from '../models/schema';
+import { UserRole, ServiceRequestStatus, PaymentStatus, PurifierConnectionStatus, InstallationRequestStatus } from '../types';
 import { getFastifyInstance } from '../shared/fastify-instance';
 
 export async function getDashboardStats(userId: string, role: UserRole, franchiseAreaId?: string) {
@@ -35,41 +35,41 @@ async function getAdminDashboardStatsInternal() {
   
   // Get all data
   const [
-    allOrders,
+    allConnections,
     allPayments,
     allFranchises,
     allServiceRequests,
-    allRentals,
-    monthlyOrders,
-    lastMonthOrders,
+    allInstallationRequests,
+    monthlyConnections,
+    lastMonthConnections,
     monthlyRevenue,
     lastMonthRevenue
   ] = await Promise.all([
-    fastify.db.query.orders.findMany({}),
-    fastify.db.query.payments.findMany({ where: eq(payments.status, PaymentStatus.COMPLETED) }),
+    fastify.db.query.purifierConnections.findMany({}),
+    fastify.db.query.subscriptionPayments.findMany({ where: eq(subscriptionPayments.status, PaymentStatus.COMPLETED) }),
     fastify.db.query.franchiseAreas.findMany({}),
     fastify.db.query.serviceRequests.findMany({}),
-    fastify.db.query.rentals.findMany({}),
-    fastify.db.query.orders.findMany({
-      where: gte(orders.createdAt, startOfMonth.toISOString())
+    fastify.db.query.installationRequests.findMany({}),
+    fastify.db.query.purifierConnections.findMany({
+      where: gte(purifierConnections.createdAt, startOfMonth.toISOString())
     }),
-    fastify.db.query.orders.findMany({
+    fastify.db.query.purifierConnections.findMany({
       where: and(
-        gte(orders.createdAt, startOfLastMonth.toISOString()),
-        lte(orders.createdAt, endOfLastMonth.toISOString())
+        gte(purifierConnections.createdAt, startOfLastMonth.toISOString()),
+        lte(purifierConnections.createdAt, endOfLastMonth.toISOString())
       )
     }),
-    fastify.db.query.payments.findMany({
+    fastify.db.query.subscriptionPayments.findMany({
       where: and(
-        eq(payments.status, PaymentStatus.COMPLETED),
-        gte(payments.createdAt, startOfMonth.toISOString())
+        eq(subscriptionPayments.status, PaymentStatus.COMPLETED),
+        gte(subscriptionPayments.createdAt, startOfMonth.toISOString())
       )
     }),
-    fastify.db.query.payments.findMany({
+    fastify.db.query.subscriptionPayments.findMany({
       where: and(
-        eq(payments.status, PaymentStatus.COMPLETED),
-        gte(payments.createdAt, startOfLastMonth.toISOString()),
-        lte(payments.createdAt, endOfLastMonth.toISOString())
+        eq(subscriptionPayments.status, PaymentStatus.COMPLETED),
+        gte(subscriptionPayments.createdAt, startOfLastMonth.toISOString()),
+        lte(subscriptionPayments.createdAt, endOfLastMonth.toISOString())
       )
     })
   ]);
@@ -83,30 +83,29 @@ async function getAdminDashboardStatsInternal() {
     : '0';
 
   const activeFranchises = allFranchises.filter(f => f.isActive).length;
-  const totalOrders = allOrders.length;
-  const ordersTrend = lastMonthOrders.length > 0 
-    ? ((monthlyOrders.length - lastMonthOrders.length) / lastMonthOrders.length * 100).toFixed(1)
+  const totalConnections = allConnections.length;
+  const connectionsTrend = lastMonthConnections.length > 0 
+    ? ((monthlyConnections.length - lastMonthConnections.length) / lastMonthConnections.length * 100).toFixed(1)
     : '0';
 
   const pendingServiceRequests = allServiceRequests.filter(sr => 
     [ServiceRequestStatus.CREATED, ServiceRequestStatus.ASSIGNED].includes(sr.status as ServiceRequestStatus)
   ).length;
 
-  // Order distribution
-  const ordersByStatus = allOrders.reduce((acc, order) => {
-    acc[order.status] = (acc[order.status] || 0) + 1;
+  // Connection distribution
+  const connectionsByStatus = allConnections.reduce((acc, connection) => {
+    acc[connection.status] = (acc[connection.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  const orderDistribution = [
-    { name: "Active Orders", population: Math.round((ordersByStatus[OrderStatus.ASSIGNED] || 0) / Math.max(totalOrders, 1) * 100), color: "#007bff" },
-    { name: "Completed", population: Math.round((ordersByStatus[OrderStatus.COMPLETED] || 0) / Math.max(totalOrders, 1) * 100), color: "#10B981" },
-    { name: "Pending", population: Math.round((ordersByStatus[OrderStatus.PAYMENT_PENDING] || 0) / Math.max(totalOrders, 1) * 100), color: "#F59E0B" },
-    { name: "Cancelled", population: Math.round((ordersByStatus[OrderStatus.CANCELLED] || 0) / Math.max(totalOrders, 1) * 100), color: "#EF4444" }
+  const connectionDistribution = [
+    { name: "Active", population: Math.round((connectionsByStatus[PurifierConnectionStatus.ACTIVE] || 0) / Math.max(totalConnections, 1) * 100), color: "#10B981" },
+    { name: "Suspended", population: Math.round((connectionsByStatus[PurifierConnectionStatus.SUSPENDED] || 0) / Math.max(totalConnections, 1) * 100), color: "#F59E0B" },
+    { name: "Terminated", population: Math.round((connectionsByStatus[PurifierConnectionStatus.TERMINATED] || 0) / Math.max(totalConnections, 1) * 100), color: "#EF4444" }
   ];
 
   // Generate monthly data for trends (last 6 months)
-  const monthlyData = generateMonthlyTrends(allOrders, allPayments, 6);
+  const monthlyData = generateMonthlyTrends(allConnections, allPayments, 6);
 
   // Revenue by category
   const purchaseRevenue = allPayments.filter(p => p.type === PaymentType.PURCHASE).reduce((sum, p) => sum + p.amount, 0);
@@ -126,9 +125,9 @@ async function getAdminDashboardStatsInternal() {
           value: activeFranchises.toString(), 
           trend: "+2" // This could be calculated if we track franchise creation dates
         },
-        totalOrders: { 
-          value: totalOrders.toString(), 
-          trend: `${ordersTrend >= 0 ? '+' : ''}${ordersTrend}%` 
+        totalConnections: { 
+          value: totalConnections.toString(), 
+          trend: `${connectionsTrend >= 0 ? '+' : ''}${connectionsTrend}%` 
         },
         serviceRequests: { 
           value: pendingServiceRequests.toString(), 
@@ -136,12 +135,12 @@ async function getAdminDashboardStatsInternal() {
         }
       },
       trends: {
-        orderDistribution,
-        revenueOrdersTrend: {
+        connectionDistribution,
+        revenueConnectionsTrend: {
           labels: monthlyData.labels,
           datasets: [
             { label: "Revenue", data: monthlyData.revenue },
-            { label: "Orders", data: monthlyData.orders }
+            { label: "Connections", data: monthlyData.connections }
           ]
         },
         performanceByCategory: {
