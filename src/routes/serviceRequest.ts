@@ -118,5 +118,133 @@ export default async function (fastify: FastifyInstance) {
     (request, reply) => scheduleServiceRequest(request as any, reply as any)
   );
 
+  // Start service with images - NEW ENDPOINT
+  fastify.patch(
+    '/:id/start',
+    {
+      schema: {
+        consumes: ['multipart/form-data'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            notes: { type: 'string' },
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+            },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Start service with optional images",
+        description: "Start a service request and optionally upload images",
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [fastify.authenticate],
+      validatorCompiler: () => () => true
+    },
+    (request, reply) => startService(request as any, reply as any)
+  );
+
+  // Complete service with images - NEW ENDPOINT
+  fastify.patch(
+    '/:id/complete',
+    {
+      schema: {
+        consumes: ['multipart/form-data'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            notes: { type: 'string' },
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+            },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Complete service with optional images",
+        description: "Complete a service request and optionally upload completion images",
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [fastify.authenticate],
+      validatorCompiler: () => () => true
+    },
+    (request, reply) => completeService(request as any, reply as any)
+  );
+
+  // Add images to service request - NEW ENDPOINT
+  fastify.post(
+    '/:id/images',
+    {
+      schema: {
+        consumes: ['multipart/form-data'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+            },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              serviceRequest: { type: 'object' }
+            }
+          }
+        },
+        tags: ["service-requests"],
+        summary: "Add images to service request",
+        description: "Add additional images to an existing service request",
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [fastify.authenticate],
+      validatorCompiler: () => () => true
+    },
+    (request, reply) => addServiceImages(request as any, reply as any)
+  );
+
   fastify.log.info('Service Request routes registered');
 }

@@ -118,6 +118,150 @@ export async function updateServiceRequestStatus(
   }
 }
 
+// Start service (with optional images) - NEW ENDPOINT
+export async function startService(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const { id } = request.params;
+    const user = request.user;
+    
+    // Handle form-data parsing for images
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field (service start images)
+        const filename = `service-requests/${id}/start-${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        // Upload to S3 if available
+        if (request.server.uploadToS3) {
+          const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+          images.push(uploadedUrl);
+        }
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const sr = await serviceRequestService.startService(id, user, {
+      notes: fields.notes || '',
+      images: images
+    });
+    
+    return reply.code(200).send({ 
+      message: 'Service started successfully', 
+      serviceRequest: sr 
+    });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}
+
+// Complete service (with optional images) - NEW ENDPOINT
+export async function completeService(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const { id } = request.params;
+    const user = request.user;
+    
+    // Handle form-data parsing for completion images
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field (service completion images)
+        const filename = `service-requests/${id}/complete-${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        // Upload to S3 if available
+        if (request.server.uploadToS3) {
+          const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+          images.push(uploadedUrl);
+        }
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const sr = await serviceRequestService.completeService(id, user, {
+      notes: fields.notes || '',
+      images: images
+    });
+    
+    return reply.code(200).send({ 
+      message: 'Service completed successfully', 
+      serviceRequest: sr 
+    });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}
+
+// Add images to service request - NEW ENDPOINT
+export async function addServiceImages(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const { id } = request.params;
+    const user = request.user;
+    
+    // Handle form-data parsing for additional images
+    const parts = request.parts();
+    const fields: Record<string, any> = {};
+    const images: string[] = [];
+
+    for await (const part of parts) {
+      if (part.file) {
+        // This is a file field
+        const filename = `service-requests/${id}/additional-${Date.now()}-${part.filename}`;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        // Upload to S3 if available
+        if (request.server.uploadToS3) {
+          const uploadedUrl = await request.server.uploadToS3(buffer, filename, part.mimetype);
+          images.push(uploadedUrl);
+        }
+      } else {
+        // This is a regular field
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const sr = await serviceRequestService.addImages(id, user, images);
+    
+    return reply.code(200).send({ 
+      message: 'Images added successfully', 
+      serviceRequest: sr 
+    });
+  } catch (error) {
+    handleError(error, request, reply);
+  }
+}
+
 // Assign service agent
 export async function assignServiceAgent(
   request: FastifyRequest<{ Params: { id: string }; Body: { assignedToId: string } }>,
